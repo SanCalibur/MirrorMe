@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "reviewed_at": "2026-07-04",
+  "policy": {
+    "commercial_distribution_target": true,
+    "prefer_separate_sidecar_process": true,
+    "capture_committed_text_only": true,
+    "require_license_notice_bundle": true,
+    "require_schema_dictionary_review": true
+  },
+  "components": [
+    {
+      "id": "rime-librime",
+      "name": "librime",
+      "role": "input_method_engine",
+      "source_url": "https://github.com/rime/librime",
+      "license": "BSD-3-Clause",
+      "distribution": "native_sidecar_candidate",
+      "commercial_fit": "strong",
+      "bundle_decision": "allowed_with_notice",
+      "required_actions": [
+        "preserve_upstream_license_text",
+        "preserve_copyright_notices",
+        "review_linked_binary_dependencies",
+        "review_schema_and_dictionary_packages_separately"
+      ]
+    },
+    {
+      "id": "rime-weasel",
+      "name": "Weasel",
+      "role": "windows_frontend_reference",
+      "source_url": "https://github.com/rime/weasel",
+      "license": "GPL-3.0",
+      "distribution": "reference_or_external_integration",
+      "commercial_fit": "weak_for_direct_bundling",
+      "bundle_decision": "do_not_bundle_directly",
+      "required_actions": [
+        "use_as_behavior_reference_only",
+        "do_not_copy_frontend_code_into_proprietary_distribution"
+      ]
+    },
+    {
+      "id": "fcitx5",
+      "name": "Fcitx 5",
+      "role": "linux_input_method_framework",
+      "source_url": "https://github.com/fcitx/fcitx5",
+      "license": "LGPL-2.1+",
+      "distribution": "platform_option",
+      "commercial_fit": "medium",
+      "bundle_decision": "requires_linking_review",
+      "required_actions": [
+        "review_dynamic_linking_strategy",
+        "preserve_license_notices",
+        "confirm_platform_scope"
+      ]
+    },
+    {
+      "id": "libpinyin",
+      "name": "libpinyin",
+      "role": "pinyin_algorithm_reference",
+      "source_url": "https://github.com/libpinyin/libpinyin",
+      "license": "GPL-3.0",
+      "distribution": "reference_only",
+      "commercial_fit": "weak_for_direct_bundling",
+      "bundle_decision": "do_not_bundle_directly",
+      "required_actions": [
+        "use_as_algorithm_reference_only",
+        "do_not_embed_in_proprietary_distribution"
+      ]
+    }
+  ],
+  "data_packages": [
+    {
+      "id": "rime-schema-luna-pinyin",
+      "name": "luna_pinyin schema package",
+      "role": "schema_and_dictionary",
+      "source_url": "https://github.com/rime/rime-luna-pinyin",
+      "license": "LGPL-3.0",
+      "bundle_decision": "allowed_with_notice",
+      "required_actions": [
+        "preserve_lgpl_3_license_text",
+        "preserve_schema_copyright_notices",
+        "record_notice_text_before_distribution"
+      ]
+    }
+  ]
+}

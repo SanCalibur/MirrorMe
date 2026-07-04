@@ -1,0 +1,18 @@
+[project]
+name = "mirrorme"
+version = "0.1.0"
+description = "Local-first personal output capture and memory foundation."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "tzdata>=2025.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

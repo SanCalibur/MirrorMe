@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MirrorMe</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">MirrorMe</p>
+          <h1>每日输出工作台</h1>
+        </div>
+        <div class="controls">
+          <input id="dateInput" type="date" />
+          <label class="toggle">
+            <input id="privateToggle" type="checkbox" />
+            <span>包含私密</span>
+          </label>
+          <button id="refreshButton" type="button">刷新</button>
+        </div>
+      </header>
+
+      <section class="capture-panel">
+        <form id="captureForm">
+          <textarea id="textInput" name="text" rows="5" placeholder="记录刚刚说过或写过的内容"></textarea>
+          <div class="capture-fields">
+            <input id="projectInput" name="project" placeholder="项目" />
+            <input id="tagsInput" name="tags" placeholder="标签，用逗号分隔" />
+            <label class="toggle">
+              <input id="eventPrivateInput" name="is_private" type="checkbox" />
+              <span>私密</span>
+            </label>
+            <button type="submit">保存</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="metric-grid" aria-label="今日概览">
+        <article>
+          <span>事件</span>
+          <strong id="eventTotal">0</strong>
+          <small id="eventSplit">公开 0 / 私密 0</small>
+        </article>
+        <article>
+          <span>待审核记忆</span>
+          <strong id="pendingTotal">0</strong>
+          <small id="memoryTotal">已确认 0</small>
+        </article>
+        <article>
+          <span>摘要版本</span>
+          <strong id="summaryTotal">0</strong>
+          <small id="latestSummary">尚无保存版本</small>
+        </article>
+        <article>
+          <span>捕获状态</span>
+          <strong id="captureStatus">运行中</strong>
+          <small>本地 SQLite</small>
+        </article>
+      </section>
+
+      <section class="dashboard">
+        <article class="summary-panel">
+          <div class="section-title">
+            <h2>摘要</h2>
+            <span id="summaryDate"></span>
+          </div>
+          <p id="summaryText" class="summary-text">暂无内容</p>
+          <div class="topic-list" id="topicList"></div>
+        </article>
+
+        <article class="activity-panel">
+          <div class="section-title">
+            <h2>主题地图</h2>
+          </div>
+          <div class="split-list">
+            <div>
+              <h3>项目</h3>
+              <div id="projectList" class="count-list"></div>
+            </div>
+            <div>
+              <h3>标签</h3>
+              <div id="tagList" class="count-list"></div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="ime-panel">
+        <article>
+          <div class="section-title">
+            <h2>中文输入法内置</h2>
+            <span id="imeStatus">读取中</span>
+          </div>
+          <div class="ime-grid">
+            <div>
+              <p class="label">选定引擎</p>
+              <strong id="imeEngine">-</strong>
+              <p id="imeLicense" class="meta">-</p>
+            </div>
+            <div>
+              <p class="label">商业内置适配度</p>
+              <strong id="imeFit">-</strong>
+              <p id="imeSource" class="meta">-</p>
+            </div>
+            <div>
+              <p class="label">捕获策略</p>
+              <div id="imePolicy" class="count-list"></div>
+            </div>
+            <div>
+              <p class="label">原生适配</p>
+              <strong id="imeReadiness">-</strong>
+              <p id="imeBinary" class="meta">-</p>
+            </div>
+          </div>
+          <div class="ime-lab">
+            <div>
+              <p class="label">协议试验台</p>
+              <input id="imeInput" placeholder="输入拼音，例如 ni hao / zhong wen" />
+            </div>
+            <div id="imeCandidates" class="candidate-buttons"></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="work-grid">
+        <article>
+          <div class="section-title">
+            <h2>事件流</h2>
+            <span id="eventDate"></span>
+          </div>
+          <div id="eventList" class="event-list"></div>
+        </article>
+
+        <article>
+          <div class="section-title">
+            <h2>记忆候选</h2>
+            <span>人工确认</span>
+          </div>
+          <div id="candidateList" class="candidate-list"></div>
+        </article>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>
