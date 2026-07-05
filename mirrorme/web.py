@@ -6,6 +6,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .ime import input_method_status
+from .ime_capture import capture_ime_commit
 from .ime_sidecar import SidecarError
 from .ime_sidecar import commit as ime_commit
 from .ime_sidecar import compose as ime_compose
@@ -121,6 +122,23 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
                             str(payload.get("text", "")),
                             candidate_index=int(payload.get("candidate_index", 1)),
                         )
+                    )
+                    return
+                if parsed.path == "/api/ime/capture":
+                    self._send_json(
+                        capture_ime_commit(
+                            self.store,
+                            str(payload.get("text", "")),
+                            candidate_index=int(payload.get("candidate_index", 1)),
+                            source_app=str(payload.get("app", "MirrorMe IME")),
+                            window_title=payload.get("window_title") or None,
+                            project=payload.get("project") or None,
+                            tags=_parse_tags(payload.get("tags")),
+                            is_private=bool(payload.get("is_private", False)),
+                            force=bool(payload.get("force", False)),
+                            created_at=payload.get("created_at") or None,
+                        ),
+                        status=201,
                     )
                     return
             except (CapturePausedError, KeyError, TypeError, ValueError, SidecarError, json.JSONDecodeError) as exc:

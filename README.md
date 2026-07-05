@@ -152,6 +152,7 @@ uv run python -m mirrorme.cli ime probe
 uv run python -m mirrorme.cli ime compliance
 uv run python -m mirrorme.cli ime compose "ni hao"
 uv run python -m mirrorme.cli ime commit "zhong wen"
+uv run python -m mirrorme.cli ime capture "wo jue de mirrorme xian zuo shu ju fen xi" --project MirrorMe --tag analysis
 uv run python -m mirrorme.cli ime sidecar
 ```
 
@@ -163,6 +164,12 @@ single executable path, to route those commands to an external native adapter:
 $env:MIRRORME_RIME_COMMAND = "uv run python -m mirrorme.cli ime sidecar"
 uv run python -m mirrorme.cli ime compose "ni hao"
 ```
+
+`ime capture` commits one candidate, stores only the committed text as a
+`source_method=ime_commit` event, and returns an `analysis` payload with the
+updated daily summary, topics, source event ids, and pending memory candidates.
+This is the direct bridge from input-method output into the MirrorMe analysis
+engine.
 
 Native sidecar skeleton:
 

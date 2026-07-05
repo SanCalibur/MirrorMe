@@ -71,9 +71,15 @@ Initial implementation status:
   packages.
 - The CLI exposes `ime compliance` to summarize allowed, pending, and blocking
   items before any binary distribution.
-- The CLI exposes `ime compose`, `ime commit`, and `ime schema`.
-- The local Web API exposes `/api/ime/compose`, `/api/ime/commit`, and
-  `/api/ime/schema`.
+- The CLI exposes `ime compose`, `ime commit`, `ime capture`, and `ime schema`.
+- `ime capture` commits a candidate, stores only the committed text as a
+  `source_method=ime_commit` event, and returns a compact analysis payload with
+  the updated daily summary, topics, source event ids, and pending memory
+  candidates.
+- The local Web API exposes `/api/ime/compose`, `/api/ime/commit`,
+  `/api/ime/capture`, and `/api/ime/schema`.
+- The dashboard can send committed IME candidates directly into the analysis
+  pipeline while reusing the current project, tag, and privacy settings.
 
 Native sidecar protocol:
 

@@ -224,6 +224,10 @@ h3 {
   align-items: end;
 }
 
+.ime-capture-toggle {
+  margin-top: 8px;
+}
+
 .candidate-buttons {
   display: flex;
   min-height: 40px;

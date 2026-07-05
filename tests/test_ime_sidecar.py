@@ -31,6 +31,13 @@ def test_stub_sidecar_commits_candidate() -> None:
     assert result["candidates"][0]["text"] == "中文"
 
 
+def test_stub_sidecar_composes_known_chunks_into_usable_phrase() -> None:
+    result = commit("wo jue de mirrorme xian zuo shu ju fen xi", candidate_index=1)
+
+    assert result["committed"] == "我觉得MirrorMe先做数据分析"
+    assert result["candidates"][1]["text"] == "我觉得 MirrorMe 先做 数据 分析"
+
+
 def test_stub_sidecar_rejects_out_of_range_candidate() -> None:
     with pytest.raises(ValueError, match="candidate_index"):
         commit("ni hao", candidate_index=99)

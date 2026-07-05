@@ -210,6 +210,39 @@ def test_ime_commit_command_reports_bad_candidate(tmp_path: Path, capsys) -> Non
     assert "candidate_index" in output["error"]
 
 
+def test_ime_capture_command_commits_and_feeds_analysis(tmp_path: Path, capsys) -> None:
+    db_path = tmp_path / "mirrorme.db"
+
+    result = main(
+        [
+            "--db",
+            str(db_path),
+            "ime",
+            "capture",
+            "wo jue de mirrorme xian zuo shu ju fen xi",
+            "--project",
+            "MirrorMe",
+            "--tag",
+            "analysis",
+            "--created-at",
+            "2026-06-25T09:00:00+08:00",
+        ]
+    )
+
+    output = json.loads(capsys.readouterr().out)
+    [event] = EventStore(db_path).list_by_date("2026-06-25")
+    summary = EventStore(db_path).daily_summary("2026-06-25")
+    assert result == 0
+    assert output["composition"]["committed"] == "我觉得MirrorMe先做数据分析"
+    assert output["event"]["id"] == event.id
+    assert output["event"]["source_method"] == "ime_commit"
+    assert output["event"]["tags"] == ["ime", "committed", "analysis"]
+    assert output["analysis"]["source_event_ids"] == [event.id]
+    assert event.raw == "我觉得MirrorMe先做数据分析"
+    assert event.project == "MirrorMe"
+    assert summary["memory_candidates"][0]["kind"] == "preference"
+
+
 def test_ime_sidecar_command_runs_json_stdio(tmp_path: Path, monkeypatch, capsys) -> None:
     monkeypatch.setattr(
         "sys.stdin",

@@ -36,6 +36,7 @@ const nodes = {
   imeReadiness: document.querySelector("#imeReadiness"),
   imeBinary: document.querySelector("#imeBinary"),
   imeInput: document.querySelector("#imeInput"),
+  imeCaptureDirect: document.querySelector("#imeCaptureDirect"),
   imeCandidates: document.querySelector("#imeCandidates"),
 };
 
@@ -193,13 +194,27 @@ function renderImeCandidates(input, candidates) {
     button.textContent = `${candidate.index}. ${candidate.text}`;
     button.title = candidate.annotation;
     button.addEventListener("click", async () => {
-      const result = await postJson("/api/ime/commit", {
-        text: input,
-        candidate_index: candidate.index,
-      });
-      if (result.committed) {
-        nodes.textInput.value = `${nodes.textInput.value}${result.committed}`;
-        nodes.textInput.focus();
+      if (nodes.imeCaptureDirect.checked) {
+        await postJson("/api/ime/capture", {
+          text: input,
+          candidate_index: candidate.index,
+          project: nodes.projectInput.value.trim(),
+          tags: nodes.tagsInput.value.trim(),
+          is_private: nodes.eventPrivateInput.checked,
+        });
+        nodes.imeInput.value = "";
+        nodes.imeCandidates.replaceChildren();
+        nodes.imeCandidates.append(empty("已提交到分析"));
+        refresh();
+      } else {
+        const result = await postJson("/api/ime/commit", {
+          text: input,
+          candidate_index: candidate.index,
+        });
+        if (result.committed) {
+          nodes.textInput.value = `${nodes.textInput.value}${result.committed}`;
+          nodes.textInput.focus();
+        }
       }
     });
     nodes.imeCandidates.append(button);

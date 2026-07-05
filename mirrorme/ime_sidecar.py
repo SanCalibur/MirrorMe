@@ -218,20 +218,9 @@ def _normalize_input(text: str) -> str:
 def _candidate_list(text: str) -> list[ImeCandidate]:
     if not text:
         return []
-    dictionary = {
-        "ni": ["你", "尼", "呢"],
-        "hao": ["好", "号", "浩"],
-        "ni hao": ["你好", "你 好", "倪浩"],
-        "wo": ["我", "握", "窝"],
-        "shi": ["是", "时", "事"],
-        "zhong": ["中", "种", "重"],
-        "wen": ["文", "问", "闻"],
-        "zhong wen": ["中文", "中文输入", "中文文档"],
-        "shu ru": ["输入", "输入法", "录入"],
-        "shu ru fa": ["输入法", "输入 法", "书入法"],
-        "mirrorme": ["MirrorMe"],
-    }
-    texts = dictionary.get(text, [text])
+    texts = _dictionary().get(text)
+    if texts is None:
+        texts = _compose_fallback_candidates(text)
     return [
         ImeCandidate(
             index=index + 1,
@@ -241,6 +230,81 @@ def _candidate_list(text: str) -> list[ImeCandidate]:
         )
         for index, value in enumerate(texts[:5])
     ]
+
+
+def _dictionary() -> dict[str, list[str]]:
+    return {
+        "ni": ["你", "尼", "呢"],
+        "hao": ["好", "号", "浩"],
+        "ni hao": ["你好", "你 好", "倪浩"],
+        "wo": ["我", "握", "窝"],
+        "wo shi": ["我是", "我 是"],
+        "wo yao": ["我要", "我 要"],
+        "wo xiang": ["我想", "我 想"],
+        "wo jue de": ["我觉得", "我 觉得"],
+        "shi": ["是", "时", "事"],
+        "xiang": ["想", "像", "向"],
+        "yao": ["要", "摇", "药"],
+        "jue": ["决", "觉", "绝"],
+        "de": ["的", "得", "地"],
+        "jue ding": ["决定", "决 定"],
+        "xian": ["先", "线", "现"],
+        "zuo": ["做", "作", "坐"],
+        "xian zuo": ["先做", "先 做"],
+        "zhong": ["中", "种", "重"],
+        "wen": ["文", "问", "闻"],
+        "zhong wen": ["中文", "中文输入", "中文文档"],
+        "shu": ["数", "书", "输"],
+        "ru": ["入", "如", "乳"],
+        "shu ru": ["输入", "输入法", "录入"],
+        "shu ru fa": ["输入法", "输入 法", "书入法"],
+        "shu ju": ["数据", "数 据"],
+        "fen xi": ["分析", "分 析"],
+        "yin qing": ["引擎", "引 情"],
+        "ji lu": ["记录", "记 录"],
+        "mei ri": ["每日", "每 日"],
+        "zhai yao": ["摘要", "摘 要"],
+        "ji yi": ["记忆", "记 意"],
+        "hou xuan": ["候选", "后选"],
+        "mirrorme": ["MirrorMe"],
+    }
+
+
+def _compose_fallback_candidates(text: str) -> list[str]:
+    tokens = text.split()
+    if not tokens:
+        return []
+    dictionary = _dictionary()
+    primary: list[str] = []
+    spaced: list[str] = []
+    index = 0
+    while index < len(tokens):
+        match_values: list[str] = []
+        match_size = 0
+        for size in range(min(4, len(tokens) - index), 0, -1):
+            key = " ".join(tokens[index:index + size])
+            values = dictionary.get(key)
+            if values:
+                match_values = values
+                match_size = size
+                break
+        if match_values:
+            primary.append(match_values[0])
+            spaced.append(match_values[0])
+            index += match_size
+        else:
+            primary.append(tokens[index])
+            spaced.append(tokens[index])
+            index += 1
+
+    compact = "".join(primary)
+    with_spaces = " ".join(spaced)
+    candidates = [compact]
+    if with_spaces != compact:
+        candidates.append(with_spaces)
+    if text not in candidates:
+        candidates.append(text)
+    return candidates
 
 
 def _composition_to_dict(composition: ImeComposition) -> dict[str, object]:

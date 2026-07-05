@@ -103,6 +103,39 @@ def test_web_api_exposes_ime_sidecar_protocol(tmp_path: Path) -> None:
     assert committed["committed"] == "你好"
 
 
+def test_web_api_can_capture_ime_commit_for_analysis(tmp_path: Path) -> None:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), create_handler(tmp_path / "mirrorme.db"))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+
+    try:
+        captured = _post_json(
+            f"{base_url}/api/ime/capture",
+            {
+                "text": "wo jue de mirrorme xian zuo shu ju fen xi",
+                "candidate_index": 1,
+                "project": "MirrorMe",
+                "tags": "analysis,ime-test",
+                "created_at": "2026-06-25T09:00:00+08:00",
+            },
+        )
+        overview = _get_json(f"{base_url}/api/daily?date=2026-06-25")
+        events = _get_json(f"{base_url}/api/events?date=2026-06-25")
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert captured["composition"]["committed"] == "我觉得MirrorMe先做数据分析"
+    assert captured["event"]["source_method"] == "ime_commit"
+    assert captured["event"]["tags"] == ["ime", "committed", "analysis", "ime-test"]
+    assert captured["analysis"]["source_event_ids"] == [captured["event"]["id"]]
+    assert overview["summary"]["source_event_ids"] == [captured["event"]["id"]]
+    assert overview["pending_memory_candidates"][0]["kind"] == "preference"
+    assert events[0]["id"] == captured["event"]["id"]
+
+
 def _get_json(url: str) -> object:
     with urlopen(url, timeout=5) as response:
         return json.loads(response.read().decode("utf-8"))
