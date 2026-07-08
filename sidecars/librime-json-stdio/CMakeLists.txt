@@ -11,7 +11,7 @@ add_executable(mirrorme-librime-json-stdio
 )
 
 target_compile_definitions(mirrorme-librime-json-stdio PRIVATE
-    MIRRORME_SIDECAR_VERSION="0.1.0"
+    MIRRORME_SIDECAR_VERSION="0.2.0"
 )
 
 find_path(RIME_INCLUDE_DIR

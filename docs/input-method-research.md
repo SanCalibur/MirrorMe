@@ -64,8 +64,11 @@ Initial implementation status:
   stdout.
 - `uv run python -m mirrorme.cli ime sidecar` runs the built-in JSON-stdio stub
   sidecar as a separate process for integration testing.
-- `sidecars/librime-json-stdio` contains the native C++ sidecar skeleton,
-  including CMake discovery for `rime_api.h` and the `librime` library.
+- `sidecars/librime-json-stdio` contains the native C++ sidecar adapter,
+  including CMake discovery for `rime_api.h` and the `librime` library. When
+  linked with librime it creates a real Rime session, selects the requested
+  schema, reads candidates, and commits selected candidates through JSON-stdio.
+  Without librime it still builds as a protocol placeholder.
 - `docs/ime-compliance-manifest.json` records the current commercial bundling
   decisions for engine code, GPL reference components, and schema/dictionary
   packages.
@@ -102,6 +105,8 @@ uv run python -m mirrorme.cli ime compliance
 
 $env:MIRRORME_RIME_BINARY = "D:\Tools\Rime\librime-sidecar.exe"
 $env:MIRRORME_RIME_DATA_DIR = "D:\Tools\Rime\data"
+$env:MIRRORME_RIME_SHARED_DATA_DIR = "D:\Tools\Rime\share"
+$env:MIRRORME_RIME_USER_DATA_DIR = "$env:USERPROFILE\AppData\Roaming\MirrorMe\rime"
 uv run python -m mirrorme.cli ime probe
 ```
 

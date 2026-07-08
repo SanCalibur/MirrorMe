@@ -26,7 +26,7 @@ Current build:
 - Local Web UI with capture, daily review, event stream, memory candidate review,
   and IME integration panel.
 - Chinese IME integration track based on `librime`, with a JSON-stdio sidecar
-  protocol, Python stub sidecar, native C++ sidecar skeleton, and commercial
+  protocol, Python stub sidecar, native C++ sidecar adapter, and commercial
   compliance manifest.
 
 ## Repository Map
@@ -38,7 +38,7 @@ docs/roadmap.md                 Staged implementation plan
 docs/input-method-research.md   Chinese IME research and integration notes
 docs/ime-compliance-manifest.json
                                 Machine-readable IME bundling checklist
-sidecars/librime-json-stdio/    Native librime JSON-stdio sidecar skeleton
+sidecars/librime-json-stdio/    Native librime JSON-stdio sidecar adapter
 tests/                          Pytest suite
 ```
 
@@ -171,7 +171,7 @@ updated daily summary, topics, source event ids, and pending memory candidates.
 This is the direct bridge from input-method output into the MirrorMe analysis
 engine.
 
-Native sidecar skeleton:
+Native sidecar adapter:
 
 ```powershell
 cmake -S sidecars\librime-json-stdio -B .mirrorme\build\librime-json-stdio `
@@ -179,6 +179,10 @@ cmake -S sidecars\librime-json-stdio -B .mirrorme\build\librime-json-stdio `
   -DRIME_LIBRARY=D:\Tools\Rime\lib\rime.lib
 cmake --build .mirrorme\build\librime-json-stdio --config Release
 ```
+
+At runtime, set `MIRRORME_RIME_SHARED_DATA_DIR` and
+`MIRRORME_RIME_USER_DATA_DIR` when your librime package does not use default
+Rime data locations.
 
 See:
 

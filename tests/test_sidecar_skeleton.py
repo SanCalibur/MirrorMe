@@ -27,10 +27,25 @@ def test_librime_sidecar_source_documents_protocol_and_api_hooks() -> None:
     assert "RimeTraits" in source
     assert "create_session" in source
     assert "select_schema" in source
-    assert "process_key" in source or "simulate_key_sequence" in source
+    assert "set_input" in source
+    assert "get_context" in source
+    assert "select_candidate" in source
+    assert "get_commit" in source
+    assert "free_context" in source
+    assert "free_commit" in source
+    assert "destroy_session" in source
+    assert "finalize" in source
     assert '"compose"' in source
     assert '"commit"' in source
     assert '"schema"' in source
+
+
+def test_librime_sidecar_json_field_parser_matches_keys_not_values() -> None:
+    source = (SIDECAR_DIR / "src" / "main.cpp").read_text(encoding="utf-8")
+
+    assert "key_colon_pos" in source
+    assert "std::isspace" in source
+    assert 'source.find(marker, search_from)' in source
 
 
 def test_librime_sidecar_readme_mentions_license_and_configuration() -> None:

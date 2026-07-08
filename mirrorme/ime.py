@@ -11,6 +11,10 @@ SELECTED_ENGINE_ID = "rime-librime"
 RIME_BINARY_ENV = "MIRRORME_RIME_BINARY"
 RIME_COMMAND_ENV = "MIRRORME_RIME_COMMAND"
 RIME_DATA_DIR_ENV = "MIRRORME_RIME_DATA_DIR"
+RIME_SHARED_DATA_DIR_ENV = "MIRRORME_RIME_SHARED_DATA_DIR"
+RIME_USER_DATA_DIR_ENV = "MIRRORME_RIME_USER_DATA_DIR"
+RIME_PREBUILT_DATA_DIR_ENV = "MIRRORME_RIME_PREBUILT_DATA_DIR"
+RIME_STAGING_DIR_ENV = "MIRRORME_RIME_STAGING_DIR"
 
 
 @dataclass(frozen=True)
@@ -111,13 +115,26 @@ def probe_native_adapter(env: Mapping[str, str] | None = None) -> dict[str, obje
     command_value = env.get(RIME_COMMAND_ENV, "")
     binary_value = env.get(RIME_BINARY_ENV, "")
     data_dir_value = env.get(RIME_DATA_DIR_ENV, "")
+    shared_data_dir_value = env.get(RIME_SHARED_DATA_DIR_ENV, "")
+    user_data_dir_value = env.get(RIME_USER_DATA_DIR_ENV, "")
+    prebuilt_data_dir_value = env.get(RIME_PREBUILT_DATA_DIR_ENV, "")
+    staging_dir_value = env.get(RIME_STAGING_DIR_ENV, "")
     binary_path = Path(binary_value) if binary_value else None
     data_dir = Path(data_dir_value) if data_dir_value else None
+    shared_data_dir = Path(shared_data_dir_value) if shared_data_dir_value else None
+    user_data_dir = Path(user_data_dir_value) if user_data_dir_value else None
     command_configured = bool(command_value.strip())
     binary_exists = bool(binary_path and binary_path.is_file())
     data_dir_exists = bool(data_dir and data_dir.is_dir())
+    shared_data_dir_exists = bool(shared_data_dir and shared_data_dir.is_dir())
+    user_data_dir_exists = bool(user_data_dir and user_data_dir.is_dir())
     configured = command_configured or bool(binary_path)
-    binary_ready = binary_exists and (data_dir is None or data_dir_exists)
+    data_dirs_ready = (
+        (data_dir is None or data_dir_exists)
+        and (shared_data_dir is None or shared_data_dir_exists)
+        and (user_data_dir is None or user_data_dir_exists)
+    )
+    binary_ready = binary_exists and data_dirs_ready
     ready = command_configured or binary_ready
 
     if ready:
@@ -141,6 +158,16 @@ def probe_native_adapter(env: Mapping[str, str] | None = None) -> dict[str, obje
         "data_dir_env": RIME_DATA_DIR_ENV,
         "data_dir": str(data_dir) if data_dir else None,
         "data_dir_exists": data_dir_exists,
+        "shared_data_dir_env": RIME_SHARED_DATA_DIR_ENV,
+        "shared_data_dir": str(shared_data_dir) if shared_data_dir else None,
+        "shared_data_dir_exists": shared_data_dir_exists,
+        "user_data_dir_env": RIME_USER_DATA_DIR_ENV,
+        "user_data_dir": str(user_data_dir) if user_data_dir else None,
+        "user_data_dir_exists": user_data_dir_exists,
+        "prebuilt_data_dir_env": RIME_PREBUILT_DATA_DIR_ENV,
+        "prebuilt_data_dir": prebuilt_data_dir_value or None,
+        "staging_dir_env": RIME_STAGING_DIR_ENV,
+        "staging_dir": staging_dir_value or None,
         "sidecar_protocol": {
             "process": "native_librime_sidecar",
             "transport": "json_stdio",

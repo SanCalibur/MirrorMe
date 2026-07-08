@@ -15,12 +15,16 @@ The sidecar is intentionally a separate executable:
 
 ## Current Status
 
-The C++ file is a buildable protocol placeholder. When `rime_api.h` and the
-`librime` library are available, the build defines `MIRRORME_WITH_LIBRIME` and
-the marked adapter points can be filled with real Rime session calls.
+The C++ sidecar has two build modes:
 
-Until that implementation is complete, use the built-in Python sidecar for
-integration testing:
+- With `rime_api.h` and the `librime` library available, CMake defines
+  `MIRRORME_WITH_LIBRIME` and the executable creates a real Rime session,
+  selects a schema, sets raw input, reads candidates, selects candidates for
+  commit, and returns JSON-stdio responses.
+- Without `librime`, the same executable builds as a protocol-only placeholder
+  so CLI/Web integration can still be tested.
+
+The built-in Python sidecar remains useful for deterministic integration tests:
 
 ```powershell
 $env:MIRRORME_RIME_COMMAND = "uv run python -m mirrorme.cli ime sidecar"
@@ -37,11 +41,22 @@ cmake -S sidecars\librime-json-stdio -B .mirrorme\build\librime-json-stdio `
 cmake --build .mirrorme\build\librime-json-stdio --config Release
 ```
 
+Optional runtime data paths:
+
+```powershell
+$env:MIRRORME_RIME_SHARED_DATA_DIR = "D:\Tools\Rime\share"
+$env:MIRRORME_RIME_USER_DATA_DIR = "$env:USERPROFILE\AppData\Roaming\MirrorMe\rime"
+$env:MIRRORME_RIME_PREBUILT_DATA_DIR = "D:\Tools\Rime\share\build"
+$env:MIRRORME_RIME_STAGING_DIR = "$env:USERPROFILE\AppData\Roaming\MirrorMe\rime\build"
+```
+
 Then point MirrorMe at the resulting executable:
 
 ```powershell
-$env:MIRRORME_RIME_BINARY = ".mirrorme\build\librime-json-stdio\Release\mirrorme-librime-json-stdio.exe"
+$env:MIRRORME_RIME_BINARY = ".mirrorme\build\librime-json-stdio\mirrorme-librime-json-stdio.exe"
 uv run python -m mirrorme.cli ime probe
+uv run python -m mirrorme.cli ime compose "ni hao"
+uv run python -m mirrorme.cli ime capture "ni hao" --project MirrorMe
 ```
 
 ## Protocol
@@ -75,8 +90,13 @@ Required methods:
 ## librime Integration Notes
 
 The upstream C API exposes `rime_get_api()` and a `RimeApi` table. The wrapper
-should initialize traits, create a session, select the requested schema, process
-input, read context/candidates/commit text, and free all Rime-owned structs.
+initializes traits, creates one session per request, selects the requested
+schema, sets input through `set_input` when available, reads
+`RimeContext.menu.candidates`, selects a candidate for commit, reads
+`RimeCommit`, and frees all Rime-owned structs before finalizing.
+
+Real commit mode intentionally fails if librime does not produce committed text;
+MirrorMe should not store raw pinyin as an analyzed text event.
 
 Important packaging reminders:
 

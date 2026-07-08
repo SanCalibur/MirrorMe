@@ -37,6 +37,8 @@ def test_probe_native_adapter_reports_missing_configuration() -> None:
     assert status["readiness"] == "not_configured"
     assert status["configured"] is False
     assert status["ready"] is False
+    assert status["shared_data_dir_env"] == "MIRRORME_RIME_SHARED_DATA_DIR"
+    assert status["user_data_dir_env"] == "MIRRORME_RIME_USER_DATA_DIR"
 
 
 def test_probe_native_adapter_reports_ready_configuration(tmp_path: Path) -> None:
@@ -49,6 +51,8 @@ def test_probe_native_adapter_reports_ready_configuration(tmp_path: Path) -> Non
         {
             "MIRRORME_RIME_BINARY": str(binary),
             "MIRRORME_RIME_DATA_DIR": str(data_dir),
+            "MIRRORME_RIME_SHARED_DATA_DIR": str(data_dir),
+            "MIRRORME_RIME_USER_DATA_DIR": str(data_dir),
         }
     )
 
@@ -56,6 +60,8 @@ def test_probe_native_adapter_reports_ready_configuration(tmp_path: Path) -> Non
     assert status["ready"] is True
     assert status["binary_exists"] is True
     assert status["data_dir_exists"] is True
+    assert status["shared_data_dir_exists"] is True
+    assert status["user_data_dir_exists"] is True
     assert status["sidecar_protocol"]["transport"] == "json_stdio"
 
 
