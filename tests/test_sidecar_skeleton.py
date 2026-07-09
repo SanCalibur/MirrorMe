@@ -3,12 +3,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SIDECAR_DIR = ROOT / "sidecars" / "librime-json-stdio"
+SCRIPTS_DIR = ROOT / "scripts"
 
 
 def test_librime_sidecar_skeleton_files_exist() -> None:
     assert (SIDECAR_DIR / "CMakeLists.txt").is_file()
     assert (SIDECAR_DIR / "README.md").is_file()
     assert (SIDECAR_DIR / "src" / "main.cpp").is_file()
+    assert (SCRIPTS_DIR / "setup-librime-sidecar.ps1").is_file()
+    assert (SCRIPTS_DIR / "verify-librime-sidecar.ps1").is_file()
 
 
 def test_librime_sidecar_cmake_exposes_librime_hooks() -> None:
@@ -46,6 +49,19 @@ def test_librime_sidecar_json_field_parser_matches_keys_not_values() -> None:
     assert "key_colon_pos" in source
     assert "std::isspace" in source
     assert 'source.find(marker, search_from)' in source
+
+
+def test_librime_setup_scripts_wire_build_and_runtime_env() -> None:
+    setup_script = (SCRIPTS_DIR / "setup-librime-sidecar.ps1").read_text(encoding="utf-8")
+    verify_script = (SCRIPTS_DIR / "verify-librime-sidecar.ps1").read_text(encoding="utf-8")
+
+    assert "-DRIME_INCLUDE_DIR=$RimeIncludeDir" in setup_script
+    assert "-DRIME_LIBRARY=$RimeLibrary" in setup_script
+    assert "MIRRORME_RIME_BINARY" in setup_script
+    assert "MIRRORME_RIME_SHARED_DATA_DIR" in setup_script
+    assert "MIRRORME_RIME_USER_DATA_DIR" in setup_script
+    assert "ime probe" in verify_script
+    assert "ime capture" in verify_script
 
 
 def test_librime_sidecar_readme_mentions_license_and_configuration() -> None:

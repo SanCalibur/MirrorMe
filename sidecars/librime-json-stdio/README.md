@@ -33,6 +33,17 @@ uv run python -m mirrorme.cli ime compose "ni hao"
 
 ## Build Sketch
 
+Recommended setup helper:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-librime-sidecar.ps1 `
+  -RimeRoot D:\Tools\Rime `
+  -RimeSharedDataDir D:\Tools\Rime\share `
+  -PersistUserEnv
+```
+
+Manual CMake build:
+
 ```powershell
 cmake -S sidecars\librime-json-stdio -B .mirrorme\build\librime-json-stdio `
   -DRIME_INCLUDE_DIR=D:\Tools\Rime\include `
@@ -57,6 +68,12 @@ $env:MIRRORME_RIME_BINARY = ".mirrorme\build\librime-json-stdio\mirrorme-librime
 uv run python -m mirrorme.cli ime probe
 uv run python -m mirrorme.cli ime compose "ni hao"
 uv run python -m mirrorme.cli ime capture "ni hao" --project MirrorMe
+```
+
+Smoke-test the configured binary:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify-librime-sidecar.ps1 -InputText "ni hao"
 ```
 
 ## Protocol

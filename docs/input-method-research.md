@@ -83,6 +83,11 @@ Initial implementation status:
   `/api/ime/capture`, and `/api/ime/schema`.
 - The dashboard can send committed IME candidates directly into the analysis
   pipeline while reusing the current project, tag, and privacy settings.
+- `scripts/setup-librime-sidecar.ps1` locates or accepts local librime
+  include/library/data paths, builds the native sidecar, and can persist the
+  required user environment variables.
+- `scripts/verify-librime-sidecar.ps1` smoke-tests schema, compose, `ime probe`,
+  and `ime capture` against the configured binary.
 
 Native sidecar protocol:
 
@@ -108,6 +113,9 @@ $env:MIRRORME_RIME_DATA_DIR = "D:\Tools\Rime\data"
 $env:MIRRORME_RIME_SHARED_DATA_DIR = "D:\Tools\Rime\share"
 $env:MIRRORME_RIME_USER_DATA_DIR = "$env:USERPROFILE\AppData\Roaming\MirrorMe\rime"
 uv run python -m mirrorme.cli ime probe
+
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-librime-sidecar.ps1 -RimeRoot D:\Tools\Rime -PersistUserEnv
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify-librime-sidecar.ps1 -InputText "ni hao"
 ```
 
 Schema package review:

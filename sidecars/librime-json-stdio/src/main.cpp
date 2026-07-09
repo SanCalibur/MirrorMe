@@ -111,6 +111,11 @@ const char* env_or_null(const char* name) {
   return value && value[0] ? value : nullptr;
 }
 
+const char* env_or_fallback(const char* primary, const char* fallback) {
+  const char* value = env_or_null(primary);
+  return value ? value : env_or_null(fallback);
+}
+
 void print_error(const std::string& message) {
   std::cout << "{\"error\":\"" << json_escape(message) << "\"}" << std::endl;
 }
@@ -166,7 +171,7 @@ struct CompositionPayload {
 RimeTraits make_traits() {
   RIME_STRUCT(RimeTraits, traits);
   traits.app_name = "rime.mirrorme";
-  traits.shared_data_dir = env_or_null("MIRRORME_RIME_SHARED_DATA_DIR");
+  traits.shared_data_dir = env_or_fallback("MIRRORME_RIME_SHARED_DATA_DIR", "MIRRORME_RIME_DATA_DIR");
   traits.user_data_dir = env_or_null("MIRRORME_RIME_USER_DATA_DIR");
   traits.prebuilt_data_dir = env_or_null("MIRRORME_RIME_PREBUILT_DATA_DIR");
   traits.staging_dir = env_or_null("MIRRORME_RIME_STAGING_DIR");

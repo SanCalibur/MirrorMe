@@ -39,6 +39,7 @@ docs/input-method-research.md   Chinese IME research and integration notes
 docs/ime-compliance-manifest.json
                                 Machine-readable IME bundling checklist
 sidecars/librime-json-stdio/    Native librime JSON-stdio sidecar adapter
+scripts/                        Local setup and verification helpers
 tests/                          Pytest suite
 ```
 
@@ -174,6 +175,15 @@ engine.
 Native sidecar adapter:
 
 ```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-librime-sidecar.ps1 `
+  -RimeRoot D:\Tools\Rime `
+  -RimeSharedDataDir D:\Tools\Rime\share `
+  -PersistUserEnv
+```
+
+Or configure CMake manually:
+
+```powershell
 cmake -S sidecars\librime-json-stdio -B .mirrorme\build\librime-json-stdio `
   -DRIME_INCLUDE_DIR=D:\Tools\Rime\include `
   -DRIME_LIBRARY=D:\Tools\Rime\lib\rime.lib
@@ -183,6 +193,12 @@ cmake --build .mirrorme\build\librime-json-stdio --config Release
 At runtime, set `MIRRORME_RIME_SHARED_DATA_DIR` and
 `MIRRORME_RIME_USER_DATA_DIR` when your librime package does not use default
 Rime data locations.
+
+Smoke-test the configured sidecar:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify-librime-sidecar.ps1 -InputText "ni hao"
+```
 
 See:
 
