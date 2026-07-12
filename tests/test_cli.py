@@ -202,6 +202,16 @@ def test_ime_commit_command_uses_sidecar_protocol(tmp_path: Path, capsys) -> Non
     assert output["committed"] == "中文"
 
 
+def test_ime_verify_command_smoke_tests_sidecar(tmp_path: Path, capsys) -> None:
+    result = main(["--db", str(tmp_path / "mirrorme.db"), "ime", "verify", "ni hao"])
+
+    output = json.loads(capsys.readouterr().out)
+    assert result == 0
+    assert output["ok"] is True
+    assert output["native"] is False
+    assert output["commit"]["committed"] == "你好"
+
+
 def test_ime_commit_command_reports_bad_candidate(tmp_path: Path, capsys) -> None:
     result = main(["--db", str(tmp_path / "mirrorme.db"), "ime", "commit", "ni hao", "--candidate", "99"])
 

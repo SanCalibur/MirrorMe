@@ -205,6 +205,9 @@ def build_parser() -> argparse.ArgumentParser:
     ime_commit_parser = ime_subparsers.add_parser("commit", help="commit a sidecar candidate")
     ime_commit_parser.add_argument("text", help="phonetic input to commit")
     ime_commit_parser.add_argument("--candidate", type=int, default=1, help="1-based candidate index")
+    ime_verify_parser = ime_subparsers.add_parser("verify", help="smoke-test the configured sidecar")
+    ime_verify_parser.add_argument("text", nargs="?", default="ni hao", help="phonetic input to verify")
+    ime_verify_parser.add_argument("--candidate", type=int, default=1, help="1-based candidate index")
     ime_capture_parser = ime_subparsers.add_parser("capture", help="commit a candidate and capture it for analysis")
     ime_capture_parser.add_argument("text", help="phonetic input to commit and capture")
     ime_capture_parser.add_argument("--candidate", type=int, default=1, help="1-based candidate index")
@@ -235,7 +238,7 @@ def main(argv: list[str] | None = None) -> int:
         from .ime import input_method_status
         from .ime_capture import capture_ime_commit
         from .ime_compliance import compliance_report
-        from .ime_sidecar import SidecarError, commit, compose, schema_info
+        from .ime_sidecar import SidecarError, commit, compose, schema_info, verify_sidecar
 
         status = input_method_status()
         if args.ime_command == "sidecar":
@@ -267,6 +270,14 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps({"error": str(exc)}, ensure_ascii=False))
                 return 1
             print(json.dumps(committed, ensure_ascii=False, indent=2))
+            return 0
+        if args.ime_command == "verify":
+            try:
+                report = verify_sidecar(args.text, candidate_index=args.candidate)
+            except (SidecarError, ValueError) as exc:
+                print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False))
+                return 1
+            print(json.dumps(report, ensure_ascii=False, indent=2))
             return 0
         if args.ime_command == "capture":
             try:

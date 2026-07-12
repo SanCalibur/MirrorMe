@@ -10,6 +10,7 @@ from mirrorme.ime_sidecar import (
     parse_sidecar_command,
     schema_info,
     sidecar_for_env,
+    verify_sidecar,
 )
 
 
@@ -54,6 +55,16 @@ def test_stub_sidecar_schema_and_clear() -> None:
         "candidates": [],
         "committed": None,
     }
+
+
+def test_verify_sidecar_reports_stub_smoke_test() -> None:
+    report = verify_sidecar("ni hao", env={})
+
+    assert report["ok"] is True
+    assert report["native"] is False
+    assert report["schema"]["engine"] == "stub-rime-sidecar"
+    assert report["composition"]["candidates"][0]["text"] == "你好"
+    assert report["commit"]["committed"] == "你好"
 
 
 def test_sidecar_for_env_falls_back_to_stub_when_native_is_not_ready() -> None:

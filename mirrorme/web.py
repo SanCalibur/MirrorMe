@@ -70,12 +70,34 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
             if parsed.path == "/api/ime/schema":
                 self._send_json(ime_schema_info())
                 return
+            if parsed.path == "/api/export":
+                params = parse_qs(parsed.query)
+                self._send_json(
+                    self.store.export_data(
+                        date=_first(params, "date"),
+                        include_private=_truthy(_first(params, "include_private")),
+                        include_raw=_truthy(_first(params, "include_raw")),
+                    )
+                )
+                return
             self._send_json({"error": "Not found."}, status=404)
 
         def do_POST(self) -> None:
             parsed = urlparse(self.path)
             try:
                 payload = self._read_json()
+                if parsed.path == "/api/capture/pause":
+                    self.store.pause_capture()
+                    self._send_json({"capture_paused": True})
+                    return
+                if parsed.path == "/api/capture/resume":
+                    self.store.resume_capture()
+                    self._send_json({"capture_paused": False})
+                    return
+                if parsed.path == "/api/summary/save":
+                    record = self.store.save_daily_summary(payload.get("date") or None)
+                    self._send_json(_summary_record_to_json(record), status=201)
+                    return
                 if parsed.path == "/api/events":
                     event = self.store.add_text(
                         str(payload.get("text", "")),
@@ -147,6 +169,18 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
                 return
             self._send_json({"error": "Not found."}, status=404)
 
+        def do_DELETE(self) -> None:
+            parsed = urlparse(self.path)
+            if parsed.path.startswith("/api/events/"):
+                event_id = parsed.path.removeprefix("/api/events/").strip()
+                if not event_id:
+                    self._send_json({"error": "Missing event id."}, status=400)
+                    return
+                deleted = self.store.delete_event(event_id)
+                self._send_json({"deleted_events": deleted}, status=200 if deleted else 404)
+                return
+            self._send_json({"error": "Not found."}, status=404)
+
         def log_message(self, format: str, *args: object) -> None:
             return
 
@@ -195,6 +229,18 @@ def _event_to_json(event: object) -> dict[str, object]:
         "tags": event.tags,
         "is_private": event.is_private,
         "redacted": event.redacted,
+    }
+
+
+def _summary_record_to_json(record: object) -> dict[str, object]:
+    return {
+        "id": record.id,
+        "date": record.date,
+        "version": record.version,
+        "generator": record.generator,
+        "created_at": record.created_at,
+        "source_event_ids": record.source_event_ids,
+        "summary": record.summary,
     }
 
 

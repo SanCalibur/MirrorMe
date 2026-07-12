@@ -19,6 +19,7 @@
             <input id="privateToggle" type="checkbox" />
             <span>包含私密</span>
           </label>
+          <button id="captureToggleButton" class="secondary" type="button">暂停</button>
           <button id="refreshButton" type="button">刷新</button>
         </div>
       </header>
@@ -65,9 +66,14 @@
         <article class="summary-panel">
           <div class="section-title">
             <h2>摘要</h2>
-            <span id="summaryDate"></span>
+            <div class="inline-actions">
+              <span id="summaryDate"></span>
+              <button id="saveSummaryButton" class="secondary compact" type="button">保存摘要</button>
+              <button id="exportButton" class="secondary compact" type="button">导出</button>
+            </div>
           </div>
           <p id="summaryText" class="summary-text">暂无内容</p>
+          <p id="actionStatus" class="meta action-status"></p>
           <div class="topic-list" id="topicList"></div>
         </article>
 

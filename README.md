@@ -24,7 +24,8 @@ Current build:
   deleting long-term memories.
 - Timeline, project, tag, and daily dashboard views.
 - Local Web UI with capture, daily review, event stream, memory candidate review,
-  and IME integration panel.
+  capture pause/resume, summary saving, redacted export, event deletion, and IME
+  integration panel.
 - Chinese IME integration track based on `librime`, with a JSON-stdio sidecar
   protocol, Python stub sidecar, native C++ sidecar adapter, and commercial
   compliance manifest.
@@ -153,6 +154,7 @@ uv run python -m mirrorme.cli ime probe
 uv run python -m mirrorme.cli ime compliance
 uv run python -m mirrorme.cli ime compose "ni hao"
 uv run python -m mirrorme.cli ime commit "zhong wen"
+uv run python -m mirrorme.cli ime verify "ni hao"
 uv run python -m mirrorme.cli ime capture "wo jue de mirrorme xian zuo shu ju fen xi" --project MirrorMe --tag analysis
 uv run python -m mirrorme.cli ime sidecar
 ```
@@ -204,6 +206,7 @@ See:
 
 - [docs/input-method-research.md](docs/input-method-research.md)
 - [docs/ime-compliance-manifest.json](docs/ime-compliance-manifest.json)
+- [docs/dogfood-validation.md](docs/dogfood-validation.md)
 - [sidecars/librime-json-stdio](sidecars/librime-json-stdio)
 
 ## Privacy Model

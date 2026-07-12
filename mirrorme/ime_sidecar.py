@@ -204,6 +204,26 @@ def schema_info(
     return sidecar_for_env(env, schema=schema).schema_info()
 
 
+def verify_sidecar(
+    text: str = "ni hao",
+    *,
+    candidate_index: int = 1,
+    schema: str = DEFAULT_SCHEMA,
+    env: Mapping[str, str] | None = None,
+) -> dict[str, object]:
+    sidecar = sidecar_for_env(env, schema=schema)
+    schema_payload = sidecar.schema_info()
+    composition = sidecar.compose(text)
+    committed = sidecar.commit(text, candidate_index=candidate_index)
+    return {
+        "ok": True,
+        "native": bool(schema_payload.get("native", False)),
+        "schema": schema_payload,
+        "composition": composition,
+        "commit": committed,
+    }
+
+
 def parse_sidecar_command(command: str) -> list[str]:
     parts = [part.strip('"') for part in shlex.split(command, posix=False)]
     if not parts:

@@ -166,8 +166,9 @@ Initial implementation status:
   saved summaries, pending memory candidates, and active memories into one
   read-only command.
 - A local Web dashboard can capture text events, show the daily review state,
-  inspect project/tag activity, and accept or reject memory candidates through
-  local HTTP APIs.
+  inspect project/tag activity, pause or resume capture, save summary versions,
+  export redacted daily data, delete source events, and accept or reject memory
+  candidates through local HTTP APIs.
 - A human-readable Markdown daily report can be generated for review or
   archived to disk.
 - Text can be batch-ingested from UTF-8 files or stdin, either as one event or
@@ -323,6 +324,8 @@ Current candidate direction:
 - A native C++ sidecar skeleton now lives under `sidecars/librime-json-stdio`,
   with CMake discovery for `rime_api.h` and `librime`, protocol placeholder
   behavior, and marked integration points for real Rime sessions.
+- `ime verify` smoke-tests the configured JSON-stdio sidecar and reports whether
+  the active path is still the deterministic stub or a native adapter.
 - A machine-readable IME compliance manifest tracks allowed, pending, and
   blocked bundling decisions for engines, GPL references, schemas, and
   dictionaries.

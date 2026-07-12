@@ -6,7 +6,10 @@ const state = {
 const nodes = {
   dateInput: document.querySelector("#dateInput"),
   privateToggle: document.querySelector("#privateToggle"),
+  captureToggleButton: document.querySelector("#captureToggleButton"),
   refreshButton: document.querySelector("#refreshButton"),
+  saveSummaryButton: document.querySelector("#saveSummaryButton"),
+  exportButton: document.querySelector("#exportButton"),
   captureForm: document.querySelector("#captureForm"),
   textInput: document.querySelector("#textInput"),
   projectInput: document.querySelector("#projectInput"),
@@ -21,6 +24,7 @@ const nodes = {
   captureStatus: document.querySelector("#captureStatus"),
   summaryDate: document.querySelector("#summaryDate"),
   summaryText: document.querySelector("#summaryText"),
+  actionStatus: document.querySelector("#actionStatus"),
   topicList: document.querySelector("#topicList"),
   projectList: document.querySelector("#projectList"),
   tagList: document.querySelector("#tagList"),
@@ -43,6 +47,35 @@ const nodes = {
 nodes.dateInput.value = state.date;
 
 nodes.refreshButton.addEventListener("click", refresh);
+nodes.captureToggleButton.addEventListener("click", async () => {
+  const paused = nodes.captureToggleButton.dataset.paused === "true";
+  await postJson(paused ? "/api/capture/resume" : "/api/capture/pause", {});
+  setActionStatus(paused ? "捕获已恢复" : "捕获已暂停");
+  refresh();
+});
+nodes.saveSummaryButton.addEventListener("click", async () => {
+  const record = await postJson("/api/summary/save", { date: state.date });
+  setActionStatus(`已保存摘要 v${record.version}`);
+  refresh();
+});
+nodes.exportButton.addEventListener("click", async () => {
+  const query = new URLSearchParams({
+    date: state.date,
+    include_private: state.includePrivate ? "1" : "0",
+    include_raw: "0",
+  });
+  const exported = await getJson(`/api/export?${query}`);
+  const blob = new Blob([`${JSON.stringify(exported, null, 2)}\n`], {
+    type: "application/json;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `mirrorme-${state.date}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
+  setActionStatus(`已导出 ${exported.events.length} 条事件`);
+});
 nodes.dateInput.addEventListener("change", () => {
   state.date = nodes.dateInput.value || localDate();
   refresh();
@@ -119,6 +152,8 @@ function renderOverview(overview) {
   nodes.summaryTotal.textContent = summaries.length;
   nodes.latestSummary.textContent = latest ? `v${latest.version} ${latest.id}` : "尚无保存版本";
   nodes.captureStatus.textContent = overview.capture_paused ? "已暂停" : "运行中";
+  nodes.captureToggleButton.textContent = overview.capture_paused ? "恢复" : "暂停";
+  nodes.captureToggleButton.dataset.paused = overview.capture_paused ? "true" : "false";
   nodes.summaryDate.textContent = overview.date;
   nodes.eventDate.textContent = overview.date;
   nodes.summaryText.textContent = overview.summary.summary || "暂无内容";
@@ -144,8 +179,16 @@ function renderEvents(events) {
         <span class="meta">${escapeHtml(event.project || "未归档")}</span>
       </div>
       <p class="event-text">${escapeHtml(event.redacted)}</p>
-      <p class="meta">${escapeHtml((event.tags || []).join(", ") || "无标签")}</p>
+      <div class="event-foot">
+        <p class="meta">${escapeHtml((event.tags || []).join(", ") || "无标签")}</p>
+        <button class="secondary compact" type="button" data-action="delete">删除</button>
+      </div>
     `;
+    item.querySelector('[data-action="delete"]').addEventListener("click", async () => {
+      await deleteJson(`/api/events/${encodeURIComponent(event.id)}`);
+      setActionStatus("事件已删除，相关摘要会重新生成");
+      refresh();
+    });
     nodes.eventList.append(item);
   }
 }
@@ -271,6 +314,16 @@ async function postJson(url, payload) {
   });
   if (!response.ok) throw new Error(await response.text());
   return response.json();
+}
+
+async function deleteJson(url) {
+  const response = await fetch(url, { method: "DELETE" });
+  if (!response.ok) throw new Error(await response.text());
+  return response.json();
+}
+
+function setActionStatus(text) {
+  nodes.actionStatus.textContent = text;
 }
 
 function localDate() {

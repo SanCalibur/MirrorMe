@@ -48,6 +48,12 @@ button.secondary {
   color: var(--ink);
 }
 
+button.compact {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
 button.danger {
   border-color: var(--danger);
   background: var(--danger);
@@ -119,7 +125,7 @@ h3 {
 .controls,
 .capture-fields {
   display: grid;
-  grid-template-columns: 160px auto auto;
+  grid-template-columns: 160px auto auto auto;
   gap: 10px;
   align-items: center;
 }
@@ -258,6 +264,18 @@ h3 {
   margin-bottom: 12px;
 }
 
+.inline-actions,
+.event-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-status {
+  min-height: 22px;
+  margin-top: 8px;
+}
+
 .summary-text {
   min-height: 64px;
   color: #30362f;
@@ -320,6 +338,11 @@ h3 {
 .event-text,
 .candidate-text {
   word-break: break-word;
+}
+
+.event-foot {
+  justify-content: space-between;
+  margin-top: 8px;
 }
 
 .candidate-actions {
