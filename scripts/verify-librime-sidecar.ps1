@@ -32,6 +32,7 @@ $composeResult = $composeRequest | & $Binary
 
 $env:MIRRORME_RIME_BINARY = (Resolve-Path -LiteralPath $Binary).Path
 $probe = uv run python -m mirrorme.cli ime probe
+$verification = uv run python -m mirrorme.cli ime verify $InputText --require-native
 $capture = uv run python -m mirrorme.cli --db $DbPath ime capture $InputText --project MirrorMe --tag rime-smoke --force
 
 [pscustomobject]@{
@@ -39,5 +40,6 @@ $capture = uv run python -m mirrorme.cli --db $DbPath ime capture $InputText --p
     schema = $schemaResult | ConvertFrom-Json
     compose = $composeResult | ConvertFrom-Json
     probe = $probe | ConvertFrom-Json
+    verification = $verification | ConvertFrom-Json
     capture = $capture | ConvertFrom-Json
 } | ConvertTo-Json -Depth 8

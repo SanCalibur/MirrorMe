@@ -62,9 +62,15 @@ def test_verify_sidecar_reports_stub_smoke_test() -> None:
 
     assert report["ok"] is True
     assert report["native"] is False
+    assert report["native_required"] is False
     assert report["schema"]["engine"] == "stub-rime-sidecar"
     assert report["composition"]["candidates"][0]["text"] == "你好"
     assert report["commit"]["committed"] == "你好"
+
+
+def test_verify_sidecar_can_require_a_native_engine() -> None:
+    with pytest.raises(SidecarError, match="native=false"):
+        verify_sidecar("ni hao", env={}, require_native=True)
 
 
 def test_sidecar_for_env_falls_back_to_stub_when_native_is_not_ready() -> None:
@@ -141,6 +147,10 @@ print(json.dumps({"result": result}, ensure_ascii=False))
     assert composition["candidates"][0]["text"] == "原生候选"
     assert committed["committed"] == "原生候选"
     assert schema["engine"] == "fake-native"
+
+    report = verify_sidecar("ni hao", env={"MIRRORME_RIME_COMMAND": f"{sys.executable} {script}"}, require_native=True)
+    assert report["native"] is True
+    assert report["native_required"] is True
 
 
 def test_native_sidecar_reports_invalid_json(tmp_path) -> None:

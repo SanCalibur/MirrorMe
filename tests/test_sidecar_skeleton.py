@@ -62,6 +62,7 @@ def test_librime_setup_scripts_wire_build_and_runtime_env() -> None:
     assert "MIRRORME_RIME_USER_DATA_DIR" in setup_script
     assert "ime probe" in verify_script
     assert "ime capture" in verify_script
+    assert "--require-native" in verify_script
 
 
 def test_librime_sidecar_readme_mentions_license_and_configuration() -> None:

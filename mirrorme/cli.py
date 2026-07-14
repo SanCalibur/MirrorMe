@@ -208,6 +208,11 @@ def build_parser() -> argparse.ArgumentParser:
     ime_verify_parser = ime_subparsers.add_parser("verify", help="smoke-test the configured sidecar")
     ime_verify_parser.add_argument("text", nargs="?", default="ni hao", help="phonetic input to verify")
     ime_verify_parser.add_argument("--candidate", type=int, default=1, help="1-based candidate index")
+    ime_verify_parser.add_argument(
+        "--require-native",
+        action="store_true",
+        help="fail unless the configured sidecar confirms it is backed by librime",
+    )
     ime_capture_parser = ime_subparsers.add_parser("capture", help="commit a candidate and capture it for analysis")
     ime_capture_parser.add_argument("text", help="phonetic input to commit and capture")
     ime_capture_parser.add_argument("--candidate", type=int, default=1, help="1-based candidate index")
@@ -273,7 +278,11 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.ime_command == "verify":
             try:
-                report = verify_sidecar(args.text, candidate_index=args.candidate)
+                report = verify_sidecar(
+                    args.text,
+                    candidate_index=args.candidate,
+                    require_native=args.require_native,
+                )
             except (SidecarError, ValueError) as exc:
                 print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False))
                 return 1

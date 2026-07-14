@@ -76,6 +76,10 @@ Smoke-test the configured binary:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify-librime-sidecar.ps1 -InputText "ni hao"
 ```
 
+The verification helper requires `native: true` from the binary's `schema`
+response. It therefore fails for the protocol-only placeholder build and only
+passes once the executable is actually linked to and running librime.
+
 ## Protocol
 
 Requests are one JSON object on stdin:

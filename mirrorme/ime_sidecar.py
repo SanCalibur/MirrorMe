@@ -210,14 +210,26 @@ def verify_sidecar(
     candidate_index: int = 1,
     schema: str = DEFAULT_SCHEMA,
     env: Mapping[str, str] | None = None,
+    require_native: bool = False,
 ) -> dict[str, object]:
     sidecar = sidecar_for_env(env, schema=schema)
     schema_payload = sidecar.schema_info()
+    native = bool(schema_payload.get("native", False))
+    if require_native and not native:
+        engine = str(schema_payload.get("engine", "unknown"))
+        raise SidecarError(
+            "Native librime verification failed: the configured sidecar reported "
+            f"native=false (engine: {engine})."
+        )
     composition = sidecar.compose(text)
     committed = sidecar.commit(text, candidate_index=candidate_index)
+    committed_text = committed.get("committed")
+    if not isinstance(committed_text, str) or not committed_text:
+        raise SidecarError("Sidecar verification failed: commit did not return text.")
     return {
         "ok": True,
-        "native": bool(schema_payload.get("native", False)),
+        "native": native,
+        "native_required": require_native,
         "schema": schema_payload,
         "composition": composition,
         "commit": committed,

@@ -212,6 +212,15 @@ def test_ime_verify_command_smoke_tests_sidecar(tmp_path: Path, capsys) -> None:
     assert output["commit"]["committed"] == "你好"
 
 
+def test_ime_verify_command_can_require_native_sidecar(tmp_path: Path, capsys) -> None:
+    result = main(["--db", str(tmp_path / "mirrorme.db"), "ime", "verify", "ni hao", "--require-native"])
+
+    output = json.loads(capsys.readouterr().out)
+    assert result == 1
+    assert output["ok"] is False
+    assert "native=false" in output["error"]
+
+
 def test_ime_commit_command_reports_bad_candidate(tmp_path: Path, capsys) -> None:
     result = main(["--db", str(tmp_path / "mirrorme.db"), "ime", "commit", "ni hao", "--candidate", "99"])
 

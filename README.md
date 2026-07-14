@@ -155,6 +155,7 @@ uv run python -m mirrorme.cli ime compliance
 uv run python -m mirrorme.cli ime compose "ni hao"
 uv run python -m mirrorme.cli ime commit "zhong wen"
 uv run python -m mirrorme.cli ime verify "ni hao"
+uv run python -m mirrorme.cli ime verify "ni hao" --require-native
 uv run python -m mirrorme.cli ime capture "wo jue de mirrorme xian zuo shu ju fen xi" --project MirrorMe --tag analysis
 uv run python -m mirrorme.cli ime sidecar
 ```
@@ -201,6 +202,11 @@ Smoke-test the configured sidecar:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify-librime-sidecar.ps1 -InputText "ni hao"
 ```
+
+The plain `ime verify` command also verifies the deterministic stub. Add
+`--require-native` for release checks: it fails unless the configured binary
+reports `native: true`, which prevents a protocol-only placeholder from being
+mistaken for a linked librime build.
 
 See:
 

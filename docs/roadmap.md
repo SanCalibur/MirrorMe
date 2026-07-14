@@ -326,6 +326,9 @@ Current candidate direction:
   behavior, and marked integration points for real Rime sessions.
 - `ime verify` smoke-tests the configured JSON-stdio sidecar and reports whether
   the active path is still the deterministic stub or a native adapter.
+- `ime verify --require-native` is the release-check variant: it rejects both
+  the Python stub and a C++ protocol-only placeholder binary, preventing a
+  configured executable from being mistaken for a functioning librime engine.
 - A machine-readable IME compliance manifest tracks allowed, pending, and
   blocked bundling decisions for engines, GPL references, schemas, and
   dictionaries.
