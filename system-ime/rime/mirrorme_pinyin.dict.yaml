@@ -1,0 +1,14 @@
+---
+name: mirrorme_pinyin
+version: "0.1"
+sort: by_weight
+use_preset_vocabulary: true
+import_tables:
+  - luna_pinyin
+...
+
+MirrorMe	mirrorme	100
+每日输出	mei ri shu chu	80
+数据分析	shu ju fen xi	80
+个人记忆	ge ren ji yi	80
+本地优先	ben di you xian	80

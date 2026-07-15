@@ -175,6 +175,27 @@ updated daily summary, topics, source event ids, and pending memory candidates.
 This is the direct bridge from input-method output into the MirrorMe analysis
 engine.
 
+### Windows System Input Method
+
+MirrorMe can be exposed to Windows as the `MirrorMe Pinyin` Rime schema by
+using an externally installed Weasel TSF frontend. This keeps Weasel's GPL
+frontend outside this repository and uses MirrorMe only for the schema,
+dictionary, and local capture integration.
+
+After downloading Weasel from its official releases page, run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-system-ime.ps1 `
+  -InstallWeasel `
+  -WeaselSetup C:\Users\you\Downloads\WeaselSetup.exe
+```
+
+If Weasel is already installed, omit `-InstallWeasel`. The script copies the
+MirrorMe Rime files to `%APPDATA%\Rime`, adds the schema to `default.custom.yaml`
+with a timestamped backup, and invokes Weasel deployment. Select `MirrorMe
+Pinyin` from the Weasel schema menu; it then becomes available through the
+normal Windows input switcher.
+
 Native sidecar adapter:
 
 ```powershell

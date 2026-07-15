@@ -4,4 +4,6 @@
 __pycache__/
 .pytest_cache/
 *.pyc
-Rime/
+/Rime/
+.mirrorme/browser-check.db
+weasel-*-installer.exe
