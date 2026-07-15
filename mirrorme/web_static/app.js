@@ -2,6 +2,7 @@ const state = {
   date: localDate(),
   includePrivate: false,
 };
+let imeRequestSequence = 0;
 
 const nodes = {
   dateInput: document.querySelector("#dateInput"),
@@ -32,6 +33,7 @@ const nodes = {
   eventList: document.querySelector("#eventList"),
   candidateList: document.querySelector("#candidateList"),
   imeStatus: document.querySelector("#imeStatus"),
+  imeMode: document.querySelector("#imeMode"),
   imeEngine: document.querySelector("#imeEngine"),
   imeLicense: document.querySelector("#imeLicense"),
   imeFit: document.querySelector("#imeFit"),
@@ -99,13 +101,24 @@ nodes.captureForm.addEventListener("submit", async (event) => {
 });
 nodes.imeInput.addEventListener("input", async () => {
   const text = nodes.imeInput.value.trim();
+  const requestSequence = ++imeRequestSequence;
   if (!text) {
     nodes.imeCandidates.replaceChildren();
     nodes.imeCandidates.append(empty("等待输入"));
     return;
   }
-  const composition = await postJson("/api/ime/compose", { text });
-  renderImeCandidates(text, composition.candidates);
+  try {
+    const composition = await postJson("/api/ime/compose", { text });
+    if (requestSequence === imeRequestSequence && text === nodes.imeInput.value.trim()) {
+      renderImeCandidates(text, composition.candidates);
+    }
+  } catch (error) {
+    if (requestSequence === imeRequestSequence) {
+      nodes.imeCandidates.replaceChildren();
+      nodes.imeCandidates.append(empty("输入法服务暂不可用"));
+      setActionStatus(`输入法候选读取失败：${error.message}`);
+    }
+  }
 });
 
 refresh();
@@ -125,7 +138,10 @@ async function refresh() {
 }
 
 async function loadImeStatus() {
-  const status = await getJson("/api/ime/status");
+  const [status, schema] = await Promise.all([
+    getJson("/api/ime/status"),
+    getJson("/api/ime/schema"),
+  ]);
   const engine = status.selected_engine;
   nodes.imeStatus.textContent = engine.embedding_status;
   nodes.imeEngine.textContent = engine.name;
@@ -133,9 +149,14 @@ async function loadImeStatus() {
   nodes.imeFit.textContent = engine.commercial_fit;
   nodes.imeSource.textContent = engine.source_url;
   renderCounts(nodes.imePolicy, status.capture_policy);
-  nodes.imeReadiness.textContent = status.native_adapter.readiness;
+  const native = schema.native === true;
+  nodes.imeMode.textContent = native ? "原生 librime" : "协议 stub";
+  nodes.imeMode.dataset.native = native ? "true" : "false";
+  nodes.imeReadiness.textContent = native ? "已验证" : "未启用";
   nodes.imeBinary.textContent =
-    status.native_adapter.binary_path || `${status.native_adapter.binary_env} 未配置`;
+    native
+      ? `${schema.engine}${schema.librime_version ? ` ${schema.librime_version}` : ""}`
+      : `${schema.engine} · ${status.native_adapter.binary_env} 未配置`;
 }
 
 function renderOverview(overview) {
@@ -237,27 +258,36 @@ function renderImeCandidates(input, candidates) {
     button.textContent = `${candidate.index}. ${candidate.text}`;
     button.title = candidate.annotation;
     button.addEventListener("click", async () => {
-      if (nodes.imeCaptureDirect.checked) {
-        await postJson("/api/ime/capture", {
-          text: input,
-          candidate_index: candidate.index,
-          project: nodes.projectInput.value.trim(),
-          tags: nodes.tagsInput.value.trim(),
-          is_private: nodes.eventPrivateInput.checked,
-        });
-        nodes.imeInput.value = "";
-        nodes.imeCandidates.replaceChildren();
-        nodes.imeCandidates.append(empty("已提交到分析"));
-        refresh();
-      } else {
-        const result = await postJson("/api/ime/commit", {
-          text: input,
-          candidate_index: candidate.index,
-        });
-        if (result.committed) {
-          nodes.textInput.value = `${nodes.textInput.value}${result.committed}`;
-          nodes.textInput.focus();
+      button.disabled = true;
+      try {
+        if (nodes.imeCaptureDirect.checked) {
+          await postJson("/api/ime/capture", {
+            text: input,
+            candidate_index: candidate.index,
+            project: nodes.projectInput.value.trim(),
+            tags: nodes.tagsInput.value.trim(),
+            is_private: nodes.eventPrivateInput.checked,
+          });
+          nodes.imeInput.value = "";
+          nodes.imeCandidates.replaceChildren();
+          nodes.imeCandidates.append(empty("已提交到分析"));
+          setActionStatus(`已提交候选：${candidate.text}`);
+          refresh();
+        } else {
+          const result = await postJson("/api/ime/commit", {
+            text: input,
+            candidate_index: candidate.index,
+          });
+          if (result.committed) {
+            nodes.textInput.value = `${nodes.textInput.value}${result.committed}`;
+            nodes.textInput.focus();
+            setActionStatus(`已写入待保存文本：${result.committed}`);
+          }
         }
+      } catch (error) {
+        setActionStatus(`输入法提交失败：${error.message}`);
+      } finally {
+        button.disabled = false;
       }
     });
     nodes.imeCandidates.append(button);

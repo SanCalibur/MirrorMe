@@ -264,6 +264,22 @@ h3 {
   margin-bottom: 12px;
 }
 
+.ime-mode {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff2d6;
+  color: #7a4b00;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ime-mode[data-native="true"] {
+  border-color: #9ac9aa;
+  background: #e8f5eb;
+  color: #1f6a38;
+}
+
 .inline-actions,
 .event-foot {
   display: flex;

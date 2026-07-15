@@ -34,3 +34,5 @@ Do not move Stage 2 input-method work into a daily-driver release until:
 - Chinese UI strings and IME candidates render as UTF-8 in browser and tests.
 - Native librime sidecar configuration is either ready or clearly labelled as a
   stub in the UI.
+- The IME lab visibly distinguishes `原生 librime` from `协议 stub`, and fast
+  pinyin edits do not surface stale candidates from earlier requests.

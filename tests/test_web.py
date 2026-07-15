@@ -192,6 +192,17 @@ def test_frontend_utf8_strings_do_not_regress(tmp_path: Path) -> None:
     assert "æ¯æ—¥" not in body
 
 
+def test_frontend_marks_ime_engine_mode_and_prevents_stale_candidates() -> None:
+    root = Path(__file__).resolve().parents[1]
+    app = (root / "mirrorme" / "web_static" / "app.js").read_text(encoding="utf-8")
+    style = (root / "mirrorme" / "web_static" / "style.css").read_text(encoding="utf-8")
+
+    assert "imeMode" in app
+    assert "imeRequestSequence" in app
+    assert "nodes.imeMode.dataset.native" in app
+    assert ".ime-mode[data-native=\"true\"]" in style
+
+
 def _get_json(url: str) -> object:
     with urlopen(url, timeout=5) as response:
         return json.loads(response.read().decode("utf-8"))
