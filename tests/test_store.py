@@ -246,6 +246,15 @@ def test_llm_state_assessments_are_saved_from_accepted_documents_and_filterable(
     assert store.list_state_assessments(method="rules") == []
 
 
+def test_event_dates_excludes_private_events_by_default(tmp_path: Path) -> None:
+    store = EventStore(tmp_path / "mirrorme.db")
+    store.add_text("Public", created_at="2026-06-24T09:00:00+08:00")
+    store.add_text("Private", is_private=True, created_at="2026-06-25T09:00:00+08:00")
+
+    assert store.event_dates() == ["2026-06-24"]
+    assert store.event_dates(include_private=True) == ["2026-06-24", "2026-06-25"]
+
+
 def test_accept_candidate_creates_memory_and_removes_from_pending_review(tmp_path: Path) -> None:
     store = EventStore(tmp_path / "mirrorme.db")
     event = store.add_text("\u6211\u51b3\u5b9a MirrorMe \u5148\u505a review loop\u3002")

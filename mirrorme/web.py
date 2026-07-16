@@ -187,6 +187,34 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
                     record = self.store.save_llm_state_assessment(document, observation)
                     self._send_json(_state_assessment_to_json(record), status=201)
                     return
+                if parsed.path == "/api/state-assessments/llm/batch":
+                    existing_dates = {record.date for record in self.store.list_state_assessments(method="llm")}
+                    processed: list[dict[str, object]] = []
+                    skipped: list[str] = []
+                    failed: list[dict[str, str]] = []
+                    for date in self.store.event_dates(include_private=False):
+                        if date in existing_dates:
+                            skipped.append(date)
+                            continue
+                        try:
+                            events = self.store.list_by_date(date, include_private=False)
+                            composed_events = compose_events(events)
+                            source_text = "\n".join(f"[{event.created_at[11:19]}] {event.redacted}" for event in composed_events if event.redacted.strip())
+                            if not source_text:
+                                skipped.append(date)
+                                continue
+                            cleaned = clean_text_with_llm(text=source_text, api_url=str(payload.get("api_url", "")), api_key=str(payload.get("api_key", "")), model=str(payload.get("model", "")), prompt=str(payload.get("cleaning_prompt", "")))
+                            document = self.store.save_cleaned_document(date=date, content=cleaned, source_event_ids=[event.id for event in events], model=str(payload.get("model", "")), prompt=str(payload.get("cleaning_prompt", "")))
+                            accepted = self.store.accept_cleaned_document(document.id)
+                            if accepted is None:
+                                raise ValueError("无法接受刚生成的清洗文本。")
+                            observation = observe_text_with_llm(text=accepted.content, api_url=str(payload.get("api_url", "")), api_key=str(payload.get("api_key", "")), model=str(payload.get("model", "")), prompt=str(payload.get("prompt", "")))
+                            record = self.store.save_llm_state_assessment(accepted, observation)
+                            processed.append({"date": date, "document_id": document.id, "assessment_id": record.id})
+                        except (ValueError, LlmCleaningError, LlmObservationError) as exc:
+                            failed.append({"date": date, "error": str(exc)})
+                    self._send_json({"processed": processed, "skipped": skipped, "failed": failed})
+                    return
                 if parsed.path == "/api/state-assessments/daily":
                     record = self.store.save_daily_state_assessment(
                         payload.get("date") or None,

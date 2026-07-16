@@ -306,6 +306,38 @@ def test_web_api_saves_llm_observation_from_an_accepted_document(tmp_path: Path)
     assert [record["id"] for record in records] == [saved["id"]]
 
 
+def test_web_api_batch_processes_public_dates_and_skips_existing_observations(tmp_path: Path) -> None:
+    db_path = tmp_path / "mirrorme.db"
+    store = EventStore(db_path)
+    first = store.add_text("First public day", created_at="2026-06-24T09:00:00+08:00")
+    second = store.add_text("Second public day", created_at="2026-06-25T09:00:00+08:00")
+    store.add_text("Private day", is_private=True, created_at="2026-06-26T09:00:00+08:00")
+    existing = store.save_cleaned_document(date="2026-06-24", content="First public day", source_event_ids=[first.id], model="cleaner", prompt="clean")
+    existing = store.accept_cleaned_document(existing.id)
+    assert existing is not None
+    store.save_llm_state_assessment(existing, {"method": "llm", "metrics": [], "summary": "Existing", "data_quality": "sufficient", "confidence": 0.8, "model": "observer", "prompt_hash": "hash"})
+    observation = {"method": "llm", "metrics": [], "summary": "Batch observation", "data_quality": "sufficient", "confidence": 0.8, "model": "observer", "prompt_hash": "hash"}
+
+    with patch("mirrorme.web.clean_text_with_llm", side_effect=lambda **kwargs: kwargs["text"]), patch("mirrorme.web.observe_text_with_llm", return_value=observation):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), create_handler(db_path))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base_url = f"http://127.0.0.1:{server.server_port}"
+        try:
+            result = _post_json(f"{base_url}/api/state-assessments/llm/batch", {"api_url": "http://local", "api_key": "key", "model": "model", "cleaning_prompt": "clean", "prompt": "observe"})
+            records = _get_json(f"{base_url}/api/state-assessments?method=llm")
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+    assert result["skipped"] == ["2026-06-24"]
+    assert [item["date"] for item in result["processed"]] == ["2026-06-25"]
+    assert result["failed"] == []
+    assert {record["date"] for record in records} == {"2026-06-24", "2026-06-25"}
+    assert second.id in records[0]["source_event_ids"] or second.id in records[1]["source_event_ids"]
+
+
 def test_frontend_bounds_and_groups_system_ime_event_cards() -> None:
     root = Path(__file__).resolve().parents[1]
     app = (root / "mirrorme" / "web_static" / "app.js").read_text(encoding="utf-8")

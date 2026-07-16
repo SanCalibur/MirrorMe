@@ -301,6 +301,15 @@ class EventStore:
             rows.reverse()
         return [self._row_to_event(row) for row in rows]
 
+    def event_dates(self, *, include_private: bool = False) -> list[str]:
+        query = "select distinct substr(created_at, 1, 10) as date from text_events"
+        if not include_private:
+            query += " where is_private = 0"
+        query += " order by date"
+        with self._connect() as conn:
+            rows = conn.execute(query).fetchall()
+        return [str(row["date"]) for row in rows]
+
     def list_events(
         self,
         *,
