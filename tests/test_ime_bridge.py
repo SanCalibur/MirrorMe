@@ -32,6 +32,19 @@ def test_drain_system_ime_queue_stores_only_valid_commits(tmp_path: Path) -> Non
     assert not queue.exists()
 
 
+def test_drain_uses_the_input_method_commit_timestamp(tmp_path: Path) -> None:
+    queue = tmp_path / "mirrorme-ime-commits.ndjson"
+    queue.write_text(
+        json.dumps({"version": 1, "created_at": "2026-07-16T21:25:38+0800", "text": "Timed commit"}) + "\n",
+        encoding="utf-8",
+    )
+    store = EventStore(tmp_path / "mirrorme.db")
+
+    drain_system_ime_queue(store, queue_path=queue)
+
+    assert store.list_events()[0].created_at == "2026-07-16T21:25:38+08:00"
+
+
 def test_drain_system_ime_queue_discards_commits_while_capture_is_paused(tmp_path: Path) -> None:
     queue = tmp_path / "mirrorme-ime-commits.ndjson"
     queue.write_text(json.dumps({"version": 1, "text": "Do not retain this"}) + "\n", encoding="utf-8")

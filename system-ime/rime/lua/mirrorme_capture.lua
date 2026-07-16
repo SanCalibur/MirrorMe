@@ -21,7 +21,7 @@ local function append_commit(queue_path, text)
   if not queue then
     return
   end
-  queue:write('{"version":1,"text":"' .. json_escape(text) .. '"}\n')
+  queue:write('{"version":1,"created_at":"' .. os.date("%Y-%m-%dT%H:%M:%S%z") .. '","text":"' .. json_escape(text) .. '"}\n')
   queue:close()
 end
 

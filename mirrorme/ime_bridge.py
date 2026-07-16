@@ -48,16 +48,18 @@ def _drain_system_ime_queue(
     paused = 0
     try:
         for line in claimed.read_text(encoding="utf-8").splitlines():
-            text = _committed_text(line)
-            if text is None:
+            commit = _committed_text(line)
+            if commit is None:
                 discarded += 1
                 continue
+            text, created_at = commit
             try:
                 store.add_text(
                     text,
                     source_method="system_ime_commit",
                     source_app="MirrorMe Pinyin (Weasel)",
                     tags=SYSTEM_IME_TAGS,
+                    created_at=created_at,
                 )
             except CapturePausedError:
                 paused += 1
@@ -83,7 +85,7 @@ def _claim_queue(queue: Path, processing: Path) -> Path | None:
     return processing
 
 
-def _committed_text(line: str) -> str | None:
+def _committed_text(line: str) -> tuple[str, str | None] | None:
     try:
         payload = json.loads(line.lstrip("\ufeff"))
     except json.JSONDecodeError:
@@ -94,4 +96,7 @@ def _committed_text(line: str) -> str | None:
     if not isinstance(text, str):
         return None
     text = text.strip()
-    return text or None
+    if not text:
+        return None
+    created_at = payload.get("created_at")
+    return text, created_at if isinstance(created_at, str) else None
