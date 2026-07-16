@@ -555,14 +555,25 @@ class EventStore:
         self,
         date: str | None = None,
         *,
+        start_date: str | None = None,
+        end_date: str | None = None,
         latest_per_day: bool = False,
         limit: int | None = None,
     ) -> list[StateAssessment]:
         query = "select * from state_assessments"
         args: list[object] = []
+        clauses: list[str] = []
         if date:
-            query += " where date = ?"
+            clauses.append("date = ?")
             args.append(date)
+        if start_date:
+            clauses.append("date >= ?")
+            args.append(start_date)
+        if end_date:
+            clauses.append("date <= ?")
+            args.append(end_date)
+        if clauses:
+            query += " where " + " and ".join(clauses)
         query += " order by date desc, version desc" if limit is not None else " order by date asc, version asc"
         if limit is not None:
             query += " limit ?"

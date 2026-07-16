@@ -217,6 +217,21 @@ def test_daily_state_assessments_are_versioned_and_follow_event_deletion(tmp_pat
     assert store.list_state_assessments() == []
 
 
+def test_state_assessments_can_be_filtered_by_date_range(tmp_path: Path) -> None:
+    store = EventStore(tmp_path / "mirrorme.db")
+    for date in ("2026-06-23", "2026-06-24", "2026-06-25"):
+        store.add_text(f"A note for {date}", created_at=f"{date}T09:00:00+08:00")
+        store.save_daily_state_assessment(date)
+
+    records = store.list_state_assessments(
+        start_date="2026-06-24",
+        end_date="2026-06-25",
+        latest_per_day=True,
+    )
+
+    assert [record.date for record in records] == ["2026-06-24", "2026-06-25"]
+
+
 def test_accept_candidate_creates_memory_and_removes_from_pending_review(tmp_path: Path) -> None:
     store = EventStore(tmp_path / "mirrorme.db")
     event = store.add_text("\u6211\u51b3\u5b9a MirrorMe \u5148\u505a review loop\u3002")

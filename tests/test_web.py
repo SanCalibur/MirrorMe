@@ -55,9 +55,8 @@ def test_web_root_serves_frontend(tmp_path: Path) -> None:
         thread.join(timeout=5)
 
     assert response.status == 200
-    assert "今日工作台" in body
-    assert "imeReadiness" in body
-    assert "/app.js" in body
+    assert '<div id="root"></div>' in body
+    assert "/assets/" in body
 
 
 def test_web_serves_the_separate_state_observatory_page(tmp_path: Path) -> None:
@@ -75,8 +74,8 @@ def test_web_serves_the_separate_state_observatory_page(tmp_path: Path) -> None:
         thread.join(timeout=5)
 
     assert response.status == 200
-    assert "状态观察" in body
-    assert "/state.js" in body
+    assert '<div id="root"></div>' in body
+    assert "/assets/" in body
 
 
 def test_web_api_exposes_input_method_status(tmp_path: Path) -> None:
@@ -192,23 +191,15 @@ def test_web_api_exposes_stage_one_review_controls(tmp_path: Path) -> None:
     assert after_delete["events"]["total"] == 0
 
 
-def test_frontend_utf8_strings_do_not_regress(tmp_path: Path) -> None:
-    server = ThreadingHTTPServer(("127.0.0.1", 0), create_handler(tmp_path / "mirrorme.db"))
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    base_url = f"http://127.0.0.1:{server.server_port}"
+def test_frontend_utf8_strings_do_not_regress() -> None:
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+    analysis = (root / "frontend" / "src" / "components" / "analysis-workspace.tsx").read_text(encoding="utf-8")
 
-    try:
-        with urlopen(f"{base_url}/", timeout=5) as response:
-            body = response.read().decode("utf-8")
-    finally:
-        server.shutdown()
-        server.server_close()
-        thread.join(timeout=5)
-
-    assert "今日工作台" in body
-    assert "保存版本" in body
-    assert "æ¯æ—¥" not in body
+    assert "数据采集" in source
+    assert "把每天的表达" in analysis
+    assert "æ¯æ—¥" not in source
+    assert "æ¯æ—¥" not in analysis
 
 
 def test_frontend_marks_ime_engine_mode_and_prevents_stale_candidates() -> None:
@@ -275,6 +266,7 @@ def test_web_api_saves_and_lists_daily_state_assessments(tmp_path: Path) -> None
         )
         saved = _post_json(f"{base_url}/api/state-assessments/daily", {"date": "2026-06-25"})
         records = _get_json(f"{base_url}/api/state-assessments?latest_per_day=1&limit=30")
+        records_in_range = _get_json(f"{base_url}/api/state-assessments?latest_per_day=1&start_date=2026-06-25&end_date=2026-06-25")
     finally:
         server.shutdown()
         server.server_close()
@@ -283,6 +275,7 @@ def test_web_api_saves_and_lists_daily_state_assessments(tmp_path: Path) -> None
     assert saved["source_event_ids"] == [event["id"]]
     assert saved["assessment"]["metrics"][3]["key"] == "stress"
     assert [record["id"] for record in records] == [saved["id"]]
+    assert [record["id"] for record in records_in_range] == [saved["id"]]
 
 
 def test_frontend_bounds_and_groups_system_ime_event_cards() -> None:

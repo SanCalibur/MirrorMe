@@ -68,6 +68,8 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
                 params = parse_qs(parsed.query)
                 records = self.store.list_state_assessments(
                     _first(params, "date"),
+                    start_date=_first(params, "start_date"),
+                    end_date=_first(params, "end_date"),
                     latest_per_day=_truthy(_first(params, "latest_per_day")),
                     limit=_positive_int(_first(params, "limit")),
                 )
