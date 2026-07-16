@@ -204,6 +204,16 @@ def test_frontend_utf8_strings_do_not_regress() -> None:
     assert "æ¯æ—¥" not in analysis
 
 
+def test_frontend_provides_default_llm_prompts_for_first_time_settings() -> None:
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+
+    assert "DEFAULT_CLEANING_PROMPT" in source
+    assert "DEFAULT_OBSERVATION_PROMPT" in source
+    assert 'sessionStorage.getItem("llm_prompt") || DEFAULT_CLEANING_PROMPT' in source
+    assert 'sessionStorage.getItem("llm_observation_prompt") || DEFAULT_OBSERVATION_PROMPT' in source
+
+
 def test_frontend_marks_ime_engine_mode_and_prevents_stale_candidates() -> None:
     root = Path(__file__).resolve().parents[1]
     app = (root / "mirrorme" / "web_static" / "app.js").read_text(encoding="utf-8")

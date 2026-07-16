@@ -8,6 +8,9 @@ const date = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" 
 const captureDate = () => new URLSearchParams(window.location.search).get("date") || date()
 async function api<T>(url: string, init?: RequestInit) { const r = await fetch(url, init); if (!r.ok) throw new Error(await r.text()); return r.json() as Promise<T> }
 
+const DEFAULT_CLEANING_PROMPT = "你是文本清洗助手。仅输出清洗后的原文，不要解释。保留原意、事实、专有名词、数字、时间顺序和不确定性；修正明显空白、断句、重复片段、口语填充词与标点。不要总结、扩写、改写立场或编造内容。"
+const DEFAULT_OBSERVATION_PROMPT = "基于当天已清洗文本做审慎的状态观察。重点评估表达准确性、思路组织、情绪语气、压力负荷、行动推进和社交取向；每项必须引用具体文本证据，并明确不确定性。避免诊断、标签化或超出文本的推断。"
+
 function Shell({ children }: { children: React.ReactNode }) {
   const path = window.location.pathname === "/" ? "/capture" : window.location.pathname
   return <div className="min-h-screen bg-zinc-50 text-zinc-950"><header className="border-b border-zinc-200 bg-white"><div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4"><a href="/capture" className="font-semibold tracking-tight">MirrorMe</a><nav className="flex gap-1">{pages.map(({ href, label, icon: Icon }) => <a key={href} href={href} className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${path === href ? "bg-zinc-950 text-white" : "text-zinc-500 hover:bg-zinc-100"}`}><Icon size={15} />{label}</a>)}</nav></div></header><main className="mx-auto max-w-6xl px-6 py-10">{children}</main></div>
@@ -32,8 +35,8 @@ function BatchSettings() {
   const [url, setUrl] = useState(sessionStorage.getItem("llm_url") || "")
   const [model, setModel] = useState(sessionStorage.getItem("llm_model") || "")
   const [key, setKey] = useState(sessionStorage.getItem("llm_key") || "")
-  const [cleaningPrompt, setCleaningPrompt] = useState(sessionStorage.getItem("llm_prompt") || "")
-  const [observationPrompt, setObservationPrompt] = useState(sessionStorage.getItem("llm_observation_prompt") || "")
+  const [cleaningPrompt, setCleaningPrompt] = useState(sessionStorage.getItem("llm_prompt") || DEFAULT_CLEANING_PROMPT)
+  const [observationPrompt, setObservationPrompt] = useState(sessionStorage.getItem("llm_observation_prompt") || DEFAULT_OBSERVATION_PROMPT)
   const [message, setMessage] = useState("保存配置后，可手动批量处理所有尚未观察的公开日期。")
   const [running, setRunning] = useState(false)
   const save = () => {
