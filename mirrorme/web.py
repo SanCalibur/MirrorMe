@@ -15,6 +15,7 @@ from .ime_sidecar import commit as ime_commit
 from .ime_sidecar import compose as ime_compose
 from .ime_sidecar import schema_info as ime_schema_info
 from .llm_cleaner import LlmCleaningError, clean_text_with_llm
+from .llm_observer import LlmObservationError, observe_text_with_llm
 from .store import DEFAULT_DB_PATH, CapturePausedError, EventStore
 from .text_workbench import process_text
 
@@ -70,6 +71,7 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
                     _first(params, "date"),
                     start_date=_first(params, "start_date"),
                     end_date=_first(params, "end_date"),
+                    method=_first(params, "method"),
                     latest_per_day=_truthy(_first(params, "latest_per_day")),
                     limit=_positive_int(_first(params, "limit")),
                 )
@@ -168,8 +170,22 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
                     if accepted is None:
                         self._send_json({"error": "Cleaned document not found."}, status=404)
                         return
-                    document, assessment = accepted
-                    self._send_json({"document": _cleaned_document_to_json(document), "assessment": _state_assessment_to_json(assessment)})
+                    self._send_json({"document": _cleaned_document_to_json(accepted)})
+                    return
+                if parsed.path == "/api/state-assessments/llm":
+                    document = self.store.get_cleaned_document(str(payload.get("document_id", "")))
+                    if document is None:
+                        self._send_json({"error": "Cleaned document not found."}, status=404)
+                        return
+                    observation = observe_text_with_llm(
+                        text=document.content,
+                        api_url=str(payload.get("api_url", "")),
+                        api_key=str(payload.get("api_key", "")),
+                        model=str(payload.get("model", "")),
+                        prompt=str(payload.get("prompt", "")),
+                    )
+                    record = self.store.save_llm_state_assessment(document, observation)
+                    self._send_json(_state_assessment_to_json(record), status=201)
                     return
                 if parsed.path == "/api/state-assessments/daily":
                     record = self.store.save_daily_state_assessment(
@@ -229,7 +245,7 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
                         status=201,
                     )
                     return
-            except (CapturePausedError, KeyError, TypeError, ValueError, SidecarError, LlmCleaningError, json.JSONDecodeError) as exc:
+            except (CapturePausedError, KeyError, TypeError, ValueError, SidecarError, LlmCleaningError, LlmObservationError, json.JSONDecodeError) as exc:
                 status = 409 if isinstance(exc, CapturePausedError) else 400
                 self._send_json({"error": str(exc)}, status=status)
                 return

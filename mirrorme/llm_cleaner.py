@@ -17,6 +17,16 @@ class LlmCleaningError(ValueError):
 def clean_text_with_llm(*, text: str, api_url: str, api_key: str, model: str, prompt: str | None = None) -> str:
     if not text.strip():
         return ""
+    return request_llm_completion(
+        text=text,
+        api_url=api_url,
+        api_key=api_key,
+        model=model,
+        system_prompt=prompt.strip() if prompt and prompt.strip() else SYSTEM_PROMPT,
+    )
+
+
+def request_llm_completion(*, text: str, api_url: str, api_key: str, model: str, system_prompt: str) -> str:
     if not api_url.strip() or not api_key.strip() or not model.strip():
         raise LlmCleaningError("请填写 LLM URL、API Key 和模型名称。")
     endpoint = _chat_completions_url(api_url)
@@ -24,7 +34,7 @@ def clean_text_with_llm(*, text: str, api_url: str, api_key: str, model: str, pr
         "model": model.strip(),
         "temperature": 0,
         "messages": [
-            {"role": "system", "content": prompt.strip() if prompt and prompt.strip() else SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": text},
         ],
     }

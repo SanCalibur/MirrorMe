@@ -496,6 +496,8 @@ class EventStore:
         composed_events = compose_events(events)
         text = "\n".join(event.redacted.strip() for event in composed_events if event.redacted.strip())
         assessment = evaluate_text(text)
+        assessment["method"] = "rules"
+        assessment["evaluator_version"] = "rule-v1"
         assessment["input_scope"] = "包含私密事件" if include_private else "仅公开事件"
         assessment["source_event_count"] = len(events)
         version = self._next_state_assessment_version(date)
@@ -534,22 +536,35 @@ class EventStore:
             conn.execute("insert into cleaned_documents (id,date,version,content,source_event_ids_json,model,prompt_hash,status,created_at) values (?,?,?,?,?,?,?,?,?)", (record.id, record.date, record.version, record.content, json.dumps(record.source_event_ids, ensure_ascii=False), record.model, record.prompt_hash, record.status, record.created_at))
         return record
 
-    def accept_cleaned_document(self, document_id: str) -> tuple[CleanedDocument, StateAssessment] | None:
+    def accept_cleaned_document(self, document_id: str) -> CleanedDocument | None:
         with self._connect() as conn:
             row = conn.execute("select * from cleaned_documents where id = ?", (document_id,)).fetchone()
             if row is None:
                 return None
             conn.execute("update cleaned_documents set status = 'accepted' where id = ?", (document_id,))
-        document = self._row_to_cleaned_document({**dict(row), "status": "accepted"})
-        assessment = evaluate_text(document.content)
-        assessment["input_scope"] = "已接受清洗文本"
-        assessment["source_event_count"] = len(document.source_event_ids)
+        return self._row_to_cleaned_document({**dict(row), "status": "accepted"})
+
+    def get_cleaned_document(self, document_id: str) -> CleanedDocument | None:
+        with self._connect() as conn:
+            row = conn.execute("select * from cleaned_documents where id = ?", (document_id,)).fetchone()
+        return self._row_to_cleaned_document(row) if row is not None else None
+
+    def save_llm_state_assessment(self, document: CleanedDocument, assessment: dict[str, object]) -> StateAssessment:
+        if document.status != "accepted":
+            raise ValueError("请先接受清洗文本版本，再生成 LLM 观察。")
+        stored_assessment = {
+            **assessment,
+            "input_scope": "已接受清洗文本",
+            "source_event_count": len(document.source_event_ids),
+            "cleaned_document_id": document.id,
+            "cleaned_document_version": document.version,
+        }
         with self._connect() as conn:
             version = int(conn.execute("select coalesce(max(version), 0) + 1 from state_assessments where date = ?", (document.date,)).fetchone()[0])
             created_at = datetime.now(LOCAL_TZ).isoformat(timespec="seconds")
-            state = StateAssessment(f"state_{document.date.replace('-', '')}_{version:03d}", document.date, version, document.source_event_ids, assessment, created_at)
+            state = StateAssessment(f"state_{document.date.replace('-', '')}_{version:03d}", document.date, version, document.source_event_ids, stored_assessment, created_at)
             conn.execute("insert into state_assessments (id,date,version,source_event_ids_json,assessment_json,created_at) values (?,?,?,?,?,?)", (state.id, state.date, state.version, json.dumps(state.source_event_ids, ensure_ascii=False), json.dumps(state.assessment, ensure_ascii=False), state.created_at))
-        return document, state
+        return state
 
     def list_state_assessments(
         self,
@@ -557,6 +572,7 @@ class EventStore:
         *,
         start_date: str | None = None,
         end_date: str | None = None,
+        method: str | None = None,
         latest_per_day: bool = False,
         limit: int | None = None,
     ) -> list[StateAssessment]:
@@ -581,6 +597,8 @@ class EventStore:
         with self._connect() as conn:
             rows = conn.execute(query, args).fetchall()
         records = [self._row_to_state_assessment(row) for row in rows]
+        if method:
+            records = [record for record in records if record.assessment.get("method", "rules") == method]
         if latest_per_day:
             latest: dict[str, StateAssessment] = {}
             for record in records:

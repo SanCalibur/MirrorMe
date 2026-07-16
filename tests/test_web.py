@@ -3,7 +3,9 @@ import threading
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.request import Request, urlopen
+from unittest.mock import patch
 
+from mirrorme.store import EventStore
 from mirrorme.web import create_handler
 
 
@@ -276,6 +278,32 @@ def test_web_api_saves_and_lists_daily_state_assessments(tmp_path: Path) -> None
     assert saved["assessment"]["metrics"][3]["key"] == "stress"
     assert [record["id"] for record in records] == [saved["id"]]
     assert [record["id"] for record in records_in_range] == [saved["id"]]
+
+
+def test_web_api_saves_llm_observation_from_an_accepted_document(tmp_path: Path) -> None:
+    db_path = tmp_path / "mirrorme.db"
+    store = EventStore(db_path)
+    event = store.add_text("A daily source", created_at="2026-06-25T09:00:00+08:00")
+    document = store.save_cleaned_document(date="2026-06-25", content="A daily source", source_event_ids=[event.id], model="cleaner", prompt="clean")
+    store.accept_cleaned_document(document.id)
+    observation = {"method": "llm", "metrics": [], "summary": "A structured observation", "data_quality": "sufficient", "confidence": 0.8, "model": "observer", "prompt_hash": "hash"}
+
+    with patch("mirrorme.web.observe_text_with_llm", return_value=observation):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), create_handler(db_path))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base_url = f"http://127.0.0.1:{server.server_port}"
+        try:
+            saved = _post_json(f"{base_url}/api/state-assessments/llm", {"document_id": document.id, "api_url": "http://local", "api_key": "key", "model": "observer", "prompt": "focus"})
+            records = _get_json(f"{base_url}/api/state-assessments?method=llm&date=2026-06-25")
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+    assert saved["assessment"]["method"] == "llm"
+    assert saved["assessment"]["cleaned_document_id"] == document.id
+    assert [record["id"] for record in records] == [saved["id"]]
 
 
 def test_frontend_bounds_and_groups_system_ime_event_cards() -> None:

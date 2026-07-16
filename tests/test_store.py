@@ -232,6 +232,20 @@ def test_state_assessments_can_be_filtered_by_date_range(tmp_path: Path) -> None
     assert [record.date for record in records] == ["2026-06-24", "2026-06-25"]
 
 
+def test_llm_state_assessments_are_saved_from_accepted_documents_and_filterable(tmp_path: Path) -> None:
+    store = EventStore(tmp_path / "mirrorme.db")
+    event = store.add_text("A cleaned observation source", created_at="2026-06-25T09:00:00+08:00")
+    document = store.save_cleaned_document(date="2026-06-25", content="A cleaned observation source", source_event_ids=[event.id], model="cleaner", prompt="clean")
+    accepted = store.accept_cleaned_document(document.id)
+    assert accepted is not None
+
+    saved = store.save_llm_state_assessment(accepted, {"method": "llm", "metrics": [], "summary": "Observed", "confidence": 0.7})
+
+    assert saved.assessment["cleaned_document_id"] == document.id
+    assert store.list_state_assessments(method="llm") == [saved]
+    assert store.list_state_assessments(method="rules") == []
+
+
 def test_accept_candidate_creates_memory_and_removes_from_pending_review(tmp_path: Path) -> None:
     store = EventStore(tmp_path / "mirrorme.db")
     event = store.add_text("\u6211\u51b3\u5b9a MirrorMe \u5148\u505a review loop\u3002")
