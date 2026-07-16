@@ -3,6 +3,8 @@ const state = {
   includePrivate: false,
 };
 let imeRequestSequence = 0;
+const EVENT_WINDOW_LIMIT = 120;
+const SYSTEM_IME_GROUP_GAP_MS = 8000;
 
 const nodes = {
   dateInput: document.querySelector("#dateInput"),
@@ -44,11 +46,78 @@ const nodes = {
   imeInput: document.querySelector("#imeInput"),
   imeCaptureDirect: document.querySelector("#imeCaptureDirect"),
   imeCandidates: document.querySelector("#imeCandidates"),
+  loadSummaryButton: document.querySelector("#loadSummaryButton"),
+  processTextButton: document.querySelector("#processTextButton"),
+  saveDailyAssessmentButton: document.querySelector("#saveDailyAssessmentButton"),
+  workbenchInput: document.querySelector("#workbenchInput"),
+  replacementRules: document.querySelector("#replacementRules"),
+  deduplicateInput: document.querySelector("#deduplicateInput"),
+  useLlmCleaner: document.querySelector("#useLlmCleaner"),
+  llmApiUrl: document.querySelector("#llmApiUrl"),
+  llmApiKey: document.querySelector("#llmApiKey"),
+  llmModel: document.querySelector("#llmModel"),
+  workbenchStatus: document.querySelector("#workbenchStatus"),
+  workbenchResult: document.querySelector("#workbenchResult"),
+  evaluationDisclaimer: document.querySelector("#evaluationDisclaimer"),
+  evaluationList: document.querySelector("#evaluationList"),
+  suggestionList: document.querySelector("#suggestionList"),
 };
 
 nodes.dateInput.value = state.date;
 
 nodes.refreshButton.addEventListener("click", refresh);
+nodes.loadSummaryButton.addEventListener("click", () => {
+  nodes.workbenchInput.value = nodes.summaryText.textContent === "暂无内容" ? "" : nodes.summaryText.textContent;
+  nodes.workbenchStatus.textContent = "已载入当前摘要，可按需修改后处理。";
+});
+nodes.processTextButton.addEventListener("click", async () => {
+  const text = nodes.workbenchInput.value;
+  if (!text.trim()) {
+    nodes.workbenchStatus.textContent = "请先输入或载入要处理的文本。";
+    return;
+  }
+  nodes.processTextButton.disabled = true;
+  try {
+    let textForProcessing = text;
+    if (nodes.useLlmCleaner.checked) {
+      const cleaned = await postJson("/api/text-workbench/llm-clean", {
+        text,
+        api_url: nodes.llmApiUrl.value,
+        api_key: nodes.llmApiKey.value,
+        model: nodes.llmModel.value,
+      });
+      textForProcessing = cleaned.output;
+    }
+    const result = await postJson("/api/text-workbench/process", {
+      text: textForProcessing,
+      replacements: nodes.replacementRules.value,
+      deduplicate: nodes.deduplicateInput.checked,
+    });
+    renderWorkbenchResult(result);
+    nodes.workbenchStatus.textContent = nodes.useLlmCleaner.checked
+      ? "已使用 LLM 清洗并完成评估，密钥未被保存。"
+      : "已完成本次手动处理与评估，未写入数据库。";
+  } catch (error) {
+    nodes.workbenchStatus.textContent = `处理失败：${error.message}`;
+  } finally {
+    nodes.processTextButton.disabled = false;
+  }
+});
+nodes.saveDailyAssessmentButton.addEventListener("click", async () => {
+  nodes.saveDailyAssessmentButton.disabled = true;
+  try {
+    const record = await postJson("/api/state-assessments/daily", {
+      date: state.date,
+      include_private: state.includePrivate,
+    });
+    nodes.workbenchStatus.textContent = `已保存 ${record.date} 的状态观测 v${record.version}。`;
+    await loadStateHistory();
+  } catch (error) {
+    nodes.workbenchStatus.textContent = `保存观测失败：${error.message}`;
+  } finally {
+    nodes.saveDailyAssessmentButton.disabled = false;
+  }
+});
 nodes.captureToggleButton.addEventListener("click", async () => {
   const paused = nodes.captureToggleButton.dataset.paused === "true";
   await postJson(paused ? "/api/capture/resume" : "/api/capture/pause", {});
@@ -64,6 +133,7 @@ nodes.exportButton.addEventListener("click", async () => {
   const query = new URLSearchParams({
     date: state.date,
     include_private: state.includePrivate ? "1" : "0",
+    limit: "120",
     include_raw: "0",
   });
   const exported = await getJson(`/api/export?${query}`);
@@ -187,31 +257,92 @@ function renderOverview(overview) {
 
 function renderEvents(events) {
   nodes.eventList.replaceChildren();
-  if (!events.length) {
+  const blocks = composeEventBlocks(events);
+  if (!blocks.length) {
     nodes.eventList.append(empty("这一天还没有记录"));
     return;
   }
-  for (const event of events) {
+  for (const block of blocks) {
     const item = document.createElement("article");
-    item.className = event.is_private ? "event private" : "event";
+    item.className = block.is_private ? "event private" : "event";
     item.innerHTML = `
       <div class="event-head">
-        <strong>${escapeHtml(event.created_at.slice(11, 19))}</strong>
-        <span class="meta">${escapeHtml(event.project || "未归档")}</span>
+        <strong>${escapeHtml(block.created_at.slice(11, 19))}</strong>
+        <span class="meta">${escapeHtml(block.project || "未归档")}</span>
       </div>
-      <p class="event-text">${escapeHtml(event.redacted)}</p>
+      <p class="event-text">${escapeHtml(block.text)}</p>
       <div class="event-foot">
-        <p class="meta">${escapeHtml((event.tags || []).join(", ") || "无标签")}</p>
+        <p class="meta">${escapeHtml((block.tags || []).join(", ") || "无标签")} · ${block.event_ids.length} 条提交</p>
         <button class="secondary compact" type="button" data-action="delete">删除</button>
       </div>
     `;
     item.querySelector('[data-action="delete"]').addEventListener("click", async () => {
-      await deleteJson(`/api/events/${encodeURIComponent(event.id)}`);
+      await Promise.all(block.event_ids.map((eventId) => deleteJson(`/api/events/${encodeURIComponent(eventId)}`)));
       setActionStatus("事件已删除，相关摘要会重新生成");
       refresh();
     });
     nodes.eventList.append(item);
   }
+}
+
+function renderWorkbenchResult(result) {
+  nodes.workbenchResult.textContent = result.output || "处理后文本为空";
+  nodes.evaluationDisclaimer.textContent = result.evaluation.disclaimer;
+  nodes.evaluationList.replaceChildren();
+  for (const metric of result.evaluation.metrics) {
+    const item = document.createElement("article");
+    item.className = "evaluation";
+    item.innerHTML = `
+      <span>${escapeHtml(metric.label)}</span>
+      <strong>${metric.score}</strong>
+      <small>${escapeHtml(metric.detail)}</small>
+    `;
+    nodes.evaluationList.append(item);
+  }
+  nodes.suggestionList.replaceChildren();
+  for (const suggestion of result.evaluation.suggestions) {
+    const item = document.createElement("p");
+    item.textContent = suggestion;
+    nodes.suggestionList.append(item);
+  }
+}
+
+
+function composeEventBlocks(events) {
+  const blocks = [];
+  for (const event of events) {
+    const previous = blocks.at(-1);
+    if (previous && canAppendToBlock(previous, event)) {
+      previous.text += joinCommittedText(previous.text, event.redacted);
+      previous.event_ids.push(event.id);
+      previous.last_created_at = event.created_at;
+      continue;
+    }
+    blocks.push({
+      created_at: event.created_at,
+      last_created_at: event.created_at,
+      text: event.redacted,
+      event_ids: [event.id],
+      source_method: event.source_method,
+      source_app: event.source_app,
+      project: event.project,
+      tags: event.tags,
+      is_private: event.is_private,
+    });
+  }
+  return blocks;
+}
+
+function canAppendToBlock(block, event) {
+  if (block.source_method !== "system_ime_commit" || event.source_method !== block.source_method) return false;
+  if (block.source_app !== event.source_app || block.project !== event.project || block.is_private !== event.is_private) return false;
+  if (/[.!?。！？]$/.test(block.text)) return false;
+  return new Date(event.created_at) - new Date(block.last_created_at) <= SYSTEM_IME_GROUP_GAP_MS;
+}
+
+function joinCommittedText(previous, next) {
+  if (/[A-Za-z0-9]$/.test(previous) && /^[A-Za-z0-9]/.test(next)) return ` ${next}`;
+  return next;
 }
 
 function renderCandidates(candidates) {

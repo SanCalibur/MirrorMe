@@ -1,20 +1,24 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .ime import input_method_status
+from .ime_bridge import drain_system_ime_queue
 from .ime_capture import capture_ime_commit
 from .ime_sidecar import SidecarError
 from .ime_sidecar import commit as ime_commit
 from .ime_sidecar import compose as ime_compose
 from .ime_sidecar import schema_info as ime_schema_info
+from .llm_cleaner import LlmCleaningError, clean_text_with_llm
 from .store import DEFAULT_DB_PATH, CapturePausedError, EventStore
+from .text_workbench import process_text
 
 
-STATIC_DIR = Path(__file__).with_name("web_static")
+STATIC_DIR = Path(__file__).parents[1] / "frontend" / "dist"
 
 
 def run_server(
@@ -34,11 +38,12 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
         store = EventStore(db_path)
 
         def do_GET(self) -> None:
+            drain_system_ime_queue(self.store)
             parsed = urlparse(self.path)
-            if parsed.path == "/":
+            if parsed.path in {"/", "/state", "/capture", "/analysis", "/settings"}:
                 self._send_static("index.html")
                 return
-            if parsed.path in {"/app.js", "/style.css"}:
+            if parsed.path.startswith("/assets/"):
                 self._send_static(parsed.path.lstrip("/"))
                 return
             if parsed.path == "/api/daily":
@@ -51,8 +56,21 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
                 params = parse_qs(parsed.query)
                 date = _first(params, "date")
                 include_private = _truthy(_first(params, "include_private", "1"))
-                events = self.store.list_events(date=date, include_private=include_private)
+                events = self.store.list_events(
+                    date=date,
+                    include_private=include_private,
+                    limit=_positive_int(_first(params, "limit")),
+                )
                 self._send_json([_event_to_json(event) for event in events])
+                return
+            if parsed.path == "/api/state-assessments":
+                params = parse_qs(parsed.query)
+                records = self.store.list_state_assessments(
+                    _first(params, "date"),
+                    latest_per_day=_truthy(_first(params, "latest_per_day")),
+                    limit=_positive_int(_first(params, "limit")),
+                )
+                self._send_json([_state_assessment_to_json(record) for record in records])
                 return
             if parsed.path == "/api/projects":
                 params = parse_qs(parsed.query)
@@ -83,6 +101,7 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
             self._send_json({"error": "Not found."}, status=404)
 
         def do_POST(self) -> None:
+            drain_system_ime_queue(self.store)
             parsed = urlparse(self.path)
             try:
                 payload = self._read_json()
@@ -111,6 +130,49 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
                         created_at=payload.get("created_at") or None,
                     )
                     self._send_json(_event_to_json(event), status=201)
+                    return
+                if parsed.path == "/api/text-workbench/process":
+                    self._send_json(
+                        process_text(
+                            str(payload.get("text", "")),
+                            replacements=str(payload.get("replacements", "")),
+                            deduplicate=bool(payload.get("deduplicate", True)),
+                        )
+                    )
+                    return
+                if parsed.path == "/api/text-workbench/llm-clean":
+                    cleaned = clean_text_with_llm(
+                        text=str(payload.get("text", "")),
+                        api_url=str(payload.get("api_url", "")),
+                        api_key=str(payload.get("api_key", "")),
+                        model=str(payload.get("model", "")),
+                        prompt=str(payload.get("prompt", "")),
+                    )
+                    self._send_json({"output": cleaned})
+                    return
+                if parsed.path == "/api/daily/llm-clean":
+                    date = str(payload.get("date", "")) or None
+                    events = self.store.list_by_date(date, include_private=False)
+                    source_text = "\n".join(f"[{event.created_at[11:19]}] {event.redacted}" for event in events if event.redacted.strip())
+                    cleaned = clean_text_with_llm(text=source_text, api_url=str(payload.get("api_url", "")), api_key=str(payload.get("api_key", "")), model=str(payload.get("model", "")), prompt=str(payload.get("prompt", "")))
+                    document = self.store.save_cleaned_document(date=date or datetime.now().date().isoformat(), content=cleaned, source_event_ids=[event.id for event in events], model=str(payload.get("model", "")), prompt=str(payload.get("prompt", "")))
+                    self._send_json({"document": _cleaned_document_to_json(document), "source_event_count": len(events), "output": cleaned})
+                    return
+                if parsed.path.startswith("/api/cleaned-documents/") and parsed.path.endswith("/accept"):
+                    document_id = parsed.path.removeprefix("/api/cleaned-documents/").removesuffix("/accept").rstrip("/")
+                    accepted = self.store.accept_cleaned_document(document_id)
+                    if accepted is None:
+                        self._send_json({"error": "Cleaned document not found."}, status=404)
+                        return
+                    document, assessment = accepted
+                    self._send_json({"document": _cleaned_document_to_json(document), "assessment": _state_assessment_to_json(assessment)})
+                    return
+                if parsed.path == "/api/state-assessments/daily":
+                    record = self.store.save_daily_state_assessment(
+                        payload.get("date") or None,
+                        include_private=bool(payload.get("include_private", False)),
+                    )
+                    self._send_json(_state_assessment_to_json(record), status=201)
                     return
                 if parsed.path == "/api/review/accept":
                     memory = self.store.accept_candidate(
@@ -163,7 +225,7 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
                         status=201,
                     )
                     return
-            except (CapturePausedError, KeyError, TypeError, ValueError, SidecarError, json.JSONDecodeError) as exc:
+            except (CapturePausedError, KeyError, TypeError, ValueError, SidecarError, LlmCleaningError, json.JSONDecodeError) as exc:
                 status = 409 if isinstance(exc, CapturePausedError) else 400
                 self._send_json({"error": str(exc)}, status=status)
                 return
@@ -244,6 +306,21 @@ def _summary_record_to_json(record: object) -> dict[str, object]:
     }
 
 
+def _state_assessment_to_json(record: object) -> dict[str, object]:
+    return {
+        "id": record.id,
+        "date": record.date,
+        "version": record.version,
+        "source_event_ids": record.source_event_ids,
+        "assessment": record.assessment,
+        "created_at": record.created_at,
+    }
+
+
+def _cleaned_document_to_json(record: object) -> dict[str, object]:
+    return {"id": record.id, "date": record.date, "version": record.version, "content": record.content, "source_event_ids": record.source_event_ids, "model": record.model, "prompt_hash": record.prompt_hash, "status": record.status, "created_at": record.created_at}
+
+
 def _first(params: dict[str, list[str]], key: str, default: str | None = None) -> str | None:
     values = params.get(key)
     if not values:
@@ -253,6 +330,15 @@ def _first(params: dict[str, list[str]], key: str, default: str | None = None) -
 
 def _truthy(value: str | None) -> bool:
     return value in {"1", "true", "yes", "on"}
+
+
+def _positive_int(value: str | None) -> int | None:
+    if value is None:
+        return None
+    parsed = int(value)
+    if parsed < 1:
+        raise ValueError("limit must be a positive integer.")
+    return parsed
 
 
 def _parse_tags(value: object) -> list[str]:

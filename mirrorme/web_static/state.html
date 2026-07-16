@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>MirrorMe 状态观察</title><link rel="stylesheet" href="/state.css" /></head>
+  <body>
+    <main class="state-app">
+      <header class="state-header"><a class="state-brand" href="/"><span>MM</span>MirrorMe</a><div class="state-nav"><a href="/">工作台</a><a class="active" href="/state">状态观察</a><button id="stateRefresh" type="button">刷新记录</button></div></header>
+      <section class="state-hero"><p class="state-eyebrow">State observatory</p><h1>把每天的表达，读成一条连续的线。</h1><p>所有状态分数来自你手动保存的输出观测。它们是文本线索，不是诊断。</p></section>
+      <section id="stateEmpty" class="state-empty" hidden><strong>还没有状态观测</strong><p>在工作台选择日期，点击“留存当日观测”后，这里会开始记录。</p><a href="/">回到工作台</a></section>
+      <section id="stateContent" hidden><section class="state-latest"><div><p class="state-eyebrow">Latest observation</p><p id="latestDate" class="latest-date">-</p><p id="latestMeta" class="state-muted">-</p></div><p id="latestDisclaimer" class="state-muted state-disclaimer"></p></section><section id="metricGrid" class="state-metric-grid"></section><section class="history-section"><div class="history-head"><div><p class="state-eyebrow">Record</p><h2>连续观察</h2></div><span id="historyCount" class="state-muted"></span></div><div class="history-legend"><span><i class="legend-green"></i>一般指标</span><span><i class="legend-amber"></i>情绪倾向</span><span><i class="legend-rose"></i>压力信号</span></div><div id="historyList" class="history-list"></div></section></section>
+    </main><script src="/state.js"></script>
+  </body>
+</html>

@@ -55,9 +55,28 @@ def test_web_root_serves_frontend(tmp_path: Path) -> None:
         thread.join(timeout=5)
 
     assert response.status == 200
-    assert "每日输出工作台" in body
+    assert "今日工作台" in body
     assert "imeReadiness" in body
     assert "/app.js" in body
+
+
+def test_web_serves_the_separate_state_observatory_page(tmp_path: Path) -> None:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), create_handler(tmp_path / "mirrorme.db"))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+
+    try:
+        with urlopen(f"{base_url}/state", timeout=5) as response:
+            body = response.read().decode("utf-8")
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert response.status == 200
+    assert "状态观察" in body
+    assert "/state.js" in body
 
 
 def test_web_api_exposes_input_method_status(tmp_path: Path) -> None:
@@ -187,8 +206,8 @@ def test_frontend_utf8_strings_do_not_regress(tmp_path: Path) -> None:
         server.server_close()
         thread.join(timeout=5)
 
-    assert "每日输出工作台" in body
-    assert "保存摘要" in body
+    assert "今日工作台" in body
+    assert "保存版本" in body
     assert "æ¯æ—¥" not in body
 
 
@@ -200,7 +219,97 @@ def test_frontend_marks_ime_engine_mode_and_prevents_stale_candidates() -> None:
     assert "imeMode" in app
     assert "imeRequestSequence" in app
     assert "nodes.imeMode.dataset.native" in app
-    assert ".ime-mode[data-native=\"true\"]" in style
+    assert ".mode-badge[data-native=\"true\"]" in style
+
+
+def test_frontend_keeps_llm_key_out_of_persistent_browser_storage() -> None:
+    root = Path(__file__).resolve().parents[1]
+    app = (root / "mirrorme" / "web_static" / "app.js").read_text(encoding="utf-8")
+    index = (root / "mirrorme" / "web_static" / "index.html").read_text(encoding="utf-8")
+
+    assert "/api/text-workbench/llm-clean" in app
+    assert "localStorage" not in app
+    assert 'autocomplete="off"' in index
+
+
+def test_frontend_uses_manual_dashboard_refresh() -> None:
+    root = Path(__file__).resolve().parents[1]
+    app = (root / "mirrorme" / "web_static" / "app.js").read_text(encoding="utf-8")
+
+    assert "setInterval(refresh" not in app
+    assert 'refreshButton.addEventListener("click", refresh)' in app
+
+
+def test_web_api_processes_text_without_persisting_it(tmp_path: Path) -> None:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), create_handler(tmp_path / "mirrorme.db"))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+
+    try:
+        result = _post_json(
+            f"{base_url}/api/text-workbench/process",
+            {"text": "  我们  要做测试。我们  要做测试。 ", "replacements": "测试 => 验证"},
+        )
+        events = _get_json(f"{base_url}/api/events")
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert result["output"] == "我们要做验证。"
+    assert result["evaluation"]["metrics"][0]["key"] == "expression_accuracy"
+    assert events == []
+
+
+def test_web_api_saves_and_lists_daily_state_assessments(tmp_path: Path) -> None:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), create_handler(tmp_path / "mirrorme.db"))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+
+    try:
+        event = _post_json(
+            f"{base_url}/api/events",
+            {"text": "我很焦虑，但决定先完成下一步。", "created_at": "2026-06-25T09:00:00+08:00"},
+        )
+        saved = _post_json(f"{base_url}/api/state-assessments/daily", {"date": "2026-06-25"})
+        records = _get_json(f"{base_url}/api/state-assessments?latest_per_day=1&limit=30")
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert saved["source_event_ids"] == [event["id"]]
+    assert saved["assessment"]["metrics"][3]["key"] == "stress"
+    assert [record["id"] for record in records] == [saved["id"]]
+
+
+def test_frontend_bounds_and_groups_system_ime_event_cards() -> None:
+    root = Path(__file__).resolve().parents[1]
+    app = (root / "mirrorme" / "web_static" / "app.js").read_text(encoding="utf-8")
+
+    assert "limit: \"120\"" in app
+    assert "composeEventBlocks(events)" in app
+    assert "SYSTEM_IME_GROUP_GAP_MS" in app
+
+
+def test_web_event_api_limits_the_returned_window(tmp_path: Path) -> None:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), create_handler(tmp_path / "mirrorme.db"))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+
+    try:
+        for index in range(3):
+            _post_json(f"{base_url}/api/events", {"text": f"event {index}"})
+        events = _get_json(f"{base_url}/api/events?limit=2")
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert [event["redacted"] for event in events] == ["event 1", "event 2"]
 
 
 def _get_json(url: str) -> object:

@@ -11,7 +11,9 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from .redaction import redact_text
+from .composition import compose_events
 from .summary import build_daily_summary
+from .text_workbench import evaluate_text
 
 
 DEFAULT_DB_PATH = Path(".mirrorme") / "mirrorme.db"
@@ -67,6 +69,29 @@ class DailySummaryRecord:
     generator: str
     summary: dict[str, object]
     source_event_ids: list[str]
+    created_at: str
+
+
+@dataclass(frozen=True)
+class StateAssessment:
+    id: str
+    date: str
+    version: int
+    source_event_ids: list[str]
+    assessment: dict[str, object]
+    created_at: str
+
+
+@dataclass(frozen=True)
+class CleanedDocument:
+    id: str
+    date: str
+    version: int
+    content: str
+    source_event_ids: list[str]
+    model: str
+    prompt_hash: str
+    status: str
     created_at: str
 
 
@@ -167,6 +192,32 @@ class EventStore:
             )
             conn.execute(
                 """
+                create table if not exists state_assessments (
+                    id text primary key,
+                    date text not null,
+                    version integer not null,
+                    source_event_ids_json text not null,
+                    assessment_json text not null,
+                    created_at text not null,
+                    unique(date, version)
+                )
+                """
+            )
+            conn.execute(
+                "create index if not exists idx_state_assessments_date on state_assessments(date)"
+            )
+            conn.execute(
+                """
+                create table if not exists cleaned_documents (
+                    id text primary key, date text not null, version integer not null,
+                    content text not null, source_event_ids_json text not null,
+                    model text not null, prompt_hash text not null, status text not null,
+                    created_at text not null, unique(date, version)
+                )
+                """
+            )
+            conn.execute(
+                """
                 create table if not exists settings (
                     key text primary key,
                     value text not null,
@@ -228,27 +279,49 @@ class EventStore:
             )
         return event
 
-    def list_by_date(self, date: str | None = None, *, include_private: bool = True) -> list[TextEvent]:
+    def list_by_date(
+        self,
+        date: str | None = None,
+        *,
+        include_private: bool = True,
+        limit: int | None = None,
+    ) -> list[TextEvent]:
         date = date or datetime.now(LOCAL_TZ).date().isoformat()
         query = "select * from text_events where substr(created_at, 1, 10) = ?"
         args: list[object] = [date]
         if not include_private:
             query += " and is_private = 0"
-        query += " order by created_at asc"
+        query += " order by created_at desc" if limit is not None else " order by created_at asc"
+        if limit is not None:
+            query += " limit ?"
+            args.append(limit)
         with self._connect() as conn:
             rows = conn.execute(query, args).fetchall()
+        if limit is not None:
+            rows.reverse()
         return [self._row_to_event(row) for row in rows]
 
-    def list_events(self, *, date: str | None = None, include_private: bool = True) -> list[TextEvent]:
+    def list_events(
+        self,
+        *,
+        date: str | None = None,
+        include_private: bool = True,
+        limit: int | None = None,
+    ) -> list[TextEvent]:
         if date:
-            return self.list_by_date(date, include_private=include_private)
+            return self.list_by_date(date, include_private=include_private, limit=limit)
         query = "select * from text_events"
         args: list[object] = []
         if not include_private:
             query += " where is_private = 0"
-        query += " order by created_at asc"
+        query += " order by created_at desc" if limit is not None else " order by created_at asc"
+        if limit is not None:
+            query += " limit ?"
+            args.append(limit)
         with self._connect() as conn:
             rows = conn.execute(query, args).fetchall()
+        if limit is not None:
+            rows.reverse()
         return [self._row_to_event(row) for row in rows]
 
     def get_event(self, event_id: str) -> TextEvent | None:
@@ -406,7 +479,110 @@ class EventStore:
             ],
             "active_memories": [self._memory_to_dict(memory) for memory in active_memories],
             "capture_paused": self.is_capture_paused(),
+            "state_assessments": [
+                self._state_assessment_to_dict(record)
+                for record in self.list_state_assessments(date)
+            ],
         }
+
+    def save_daily_state_assessment(
+        self,
+        date: str | None = None,
+        *,
+        include_private: bool = False,
+    ) -> StateAssessment:
+        date = date or datetime.now(LOCAL_TZ).date().isoformat()
+        events = self.list_by_date(date, include_private=include_private)
+        composed_events = compose_events(events)
+        text = "\n".join(event.redacted.strip() for event in composed_events if event.redacted.strip())
+        assessment = evaluate_text(text)
+        assessment["input_scope"] = "包含私密事件" if include_private else "仅公开事件"
+        assessment["source_event_count"] = len(events)
+        version = self._next_state_assessment_version(date)
+        created_at = datetime.now(LOCAL_TZ).isoformat(timespec="seconds")
+        record = StateAssessment(
+            id=f"state_{date.replace('-', '')}_{version:03d}",
+            date=date,
+            version=version,
+            source_event_ids=[event.id for event in events],
+            assessment=assessment,
+            created_at=created_at,
+        )
+        with self._connect() as conn:
+            conn.execute(
+                """
+                insert into state_assessments (
+                    id, date, version, source_event_ids_json, assessment_json, created_at
+                ) values (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    record.id,
+                    record.date,
+                    record.version,
+                    json.dumps(record.source_event_ids, ensure_ascii=False),
+                    json.dumps(record.assessment, ensure_ascii=False),
+                    record.created_at,
+                ),
+            )
+        return record
+
+    def save_cleaned_document(self, *, date: str, content: str, source_event_ids: list[str], model: str, prompt: str) -> CleanedDocument:
+        with self._connect() as conn:
+            version = int(conn.execute("select coalesce(max(version), 0) + 1 from cleaned_documents where date = ?", (date,)).fetchone()[0])
+            created_at = datetime.now(LOCAL_TZ).isoformat(timespec="seconds")
+            record = CleanedDocument(f"clean_{date.replace('-', '')}_{version:03d}", date, version, content, source_event_ids, model, sha256(prompt.encode("utf-8")).hexdigest(), "draft", created_at)
+            conn.execute("insert into cleaned_documents (id,date,version,content,source_event_ids_json,model,prompt_hash,status,created_at) values (?,?,?,?,?,?,?,?,?)", (record.id, record.date, record.version, record.content, json.dumps(record.source_event_ids, ensure_ascii=False), record.model, record.prompt_hash, record.status, record.created_at))
+        return record
+
+    def accept_cleaned_document(self, document_id: str) -> tuple[CleanedDocument, StateAssessment] | None:
+        with self._connect() as conn:
+            row = conn.execute("select * from cleaned_documents where id = ?", (document_id,)).fetchone()
+            if row is None:
+                return None
+            conn.execute("update cleaned_documents set status = 'accepted' where id = ?", (document_id,))
+        document = self._row_to_cleaned_document({**dict(row), "status": "accepted"})
+        assessment = evaluate_text(document.content)
+        assessment["input_scope"] = "已接受清洗文本"
+        assessment["source_event_count"] = len(document.source_event_ids)
+        with self._connect() as conn:
+            version = int(conn.execute("select coalesce(max(version), 0) + 1 from state_assessments where date = ?", (document.date,)).fetchone()[0])
+            created_at = datetime.now(LOCAL_TZ).isoformat(timespec="seconds")
+            state = StateAssessment(f"state_{document.date.replace('-', '')}_{version:03d}", document.date, version, document.source_event_ids, assessment, created_at)
+            conn.execute("insert into state_assessments (id,date,version,source_event_ids_json,assessment_json,created_at) values (?,?,?,?,?,?)", (state.id, state.date, state.version, json.dumps(state.source_event_ids, ensure_ascii=False), json.dumps(state.assessment, ensure_ascii=False), state.created_at))
+        return document, state
+
+    def list_state_assessments(
+        self,
+        date: str | None = None,
+        *,
+        latest_per_day: bool = False,
+        limit: int | None = None,
+    ) -> list[StateAssessment]:
+        query = "select * from state_assessments"
+        args: list[object] = []
+        if date:
+            query += " where date = ?"
+            args.append(date)
+        query += " order by date desc, version desc" if limit is not None else " order by date asc, version asc"
+        if limit is not None:
+            query += " limit ?"
+            args.append(limit)
+        with self._connect() as conn:
+            rows = conn.execute(query, args).fetchall()
+        records = [self._row_to_state_assessment(row) for row in rows]
+        if latest_per_day:
+            latest: dict[str, StateAssessment] = {}
+            for record in records:
+                latest[record.date] = record
+            records = list(latest.values())
+        if limit is not None:
+            records.reverse()
+        return records
+
+    def list_cleaned_documents(self, date: str) -> list[CleanedDocument]:
+        with self._connect() as conn:
+            rows = conn.execute("select * from cleaned_documents where date = ? order by version desc", (date,)).fetchall()
+        return [self._row_to_cleaned_document(row) for row in rows]
 
     def save_daily_summary(
         self,
@@ -478,6 +654,14 @@ class EventStore:
         with self._connect() as conn:
             rows = conn.execute(query, args).fetchall()
         return [self._row_to_daily_summary_record(row) for row in rows]
+
+    def _next_state_assessment_version(self, date: str) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                "select coalesce(max(version), 0) + 1 from state_assessments where date = ?",
+                (date,),
+            ).fetchone()
+        return int(row[0])
 
     def review_candidates(
         self,
@@ -644,6 +828,7 @@ class EventStore:
             conn.execute("delete from text_events where id = ?", (event_id,))
             self._archive_memories_referencing_event(conn, event_id)
             self._delete_summaries_referencing_event(conn, event_id)
+            self._delete_state_assessments_referencing_event(conn, event_id)
         return 1
 
     def delete_events_by_date(self, date: str) -> int:
@@ -655,6 +840,7 @@ class EventStore:
                 self._archive_memories_referencing_event(conn, event.id)
                 deleted += 1
             conn.execute("delete from daily_summaries where date = ?", (date,))
+            conn.execute("delete from state_assessments where date = ?", (date,))
         return deleted
 
     def delete_events_by_tag(self, tag: str) -> int:
@@ -666,6 +852,7 @@ class EventStore:
                 conn.execute("delete from text_events where id = ?", (event.id,))
                 self._archive_memories_referencing_event(conn, event.id)
                 self._delete_summaries_referencing_event(conn, event.id)
+                self._delete_state_assessments_referencing_event(conn, event.id)
                 deleted += 1
             for date in affected_dates:
                 conn.execute("delete from daily_summaries where date = ?", (date,))
@@ -704,6 +891,7 @@ class EventStore:
             conn.execute("delete from memory_reviews")
             conn.execute("delete from memories")
             conn.execute("delete from daily_summaries")
+            conn.execute("delete from state_assessments")
             conn.execute("delete from text_events")
             conn.execute("delete from settings")
 
@@ -736,6 +924,9 @@ class EventStore:
             "capture_paused": self.is_capture_paused(),
             "events": [self._event_to_dict(event, include_raw=include_raw) for event in events],
             "daily_summaries": [self._summary_record_to_dict(record) for record in summaries],
+            "state_assessments": [
+                self._state_assessment_to_dict(record) for record in self.list_state_assessments(date)
+            ],
             "memories": [self._memory_to_dict(memory) for memory in self.list_memories(status=None)],
         }
 
@@ -1472,6 +1663,13 @@ class EventStore:
             if event_id in source_event_ids:
                 conn.execute("delete from daily_summaries where id = ?", (row["id"],))
 
+    def _delete_state_assessments_referencing_event(self, conn: sqlite3.Connection, event_id: str) -> None:
+        rows = conn.execute("select id, source_event_ids_json from state_assessments").fetchall()
+        for row in rows:
+            source_event_ids = json.loads(row["source_event_ids_json"])
+            if event_id in source_event_ids:
+                conn.execute("delete from state_assessments where id = ?", (row["id"],))
+
     def _import_event(self, conn: sqlite3.Connection, event: object, *, replace: bool) -> str:
         event_data = dict(event)
         event_id = str(event_data["id"])
@@ -1654,6 +1852,25 @@ class EventStore:
         )
 
     @staticmethod
+    def _row_to_state_assessment(row: sqlite3.Row) -> StateAssessment:
+        return StateAssessment(
+            id=row["id"],
+            date=row["date"],
+            version=int(row["version"]),
+            source_event_ids=json.loads(row["source_event_ids_json"]),
+            assessment=json.loads(row["assessment_json"]),
+            created_at=row["created_at"],
+        )
+
+    @staticmethod
+    def _row_to_cleaned_document(row: sqlite3.Row | dict[str, object]) -> CleanedDocument:
+        return CleanedDocument(
+            id=str(row["id"]), date=str(row["date"]), version=int(row["version"]),
+            content=str(row["content"]), source_event_ids=json.loads(str(row["source_event_ids_json"])),
+            model=str(row["model"]), prompt_hash=str(row["prompt_hash"]), status=str(row["status"]), created_at=str(row["created_at"]),
+        )
+
+    @staticmethod
     def _event_to_dict(event: TextEvent, *, include_raw: bool) -> dict[str, object]:
         content: dict[str, object] = {"redacted": event.redacted}
         if include_raw:
@@ -1695,6 +1912,17 @@ class EventStore:
             "created_at": record.created_at,
             "source_event_ids": record.source_event_ids,
             "summary": record.summary,
+        }
+
+    @staticmethod
+    def _state_assessment_to_dict(record: StateAssessment) -> dict[str, object]:
+        return {
+            "id": record.id,
+            "date": record.date,
+            "version": record.version,
+            "source_event_ids": record.source_event_ids,
+            "assessment": record.assessment,
+            "created_at": record.created_at,
         }
 
     @staticmethod

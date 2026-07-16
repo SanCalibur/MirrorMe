@@ -14,6 +14,8 @@ def test_system_ime_assets_define_a_mirrorme_pinyin_schema() -> None:
     assert "schema_id: mirrorme_pinyin" in schema
     assert "name: MirrorMe Pinyin" in schema
     assert "dictionary: mirrorme_pinyin" in schema
+    assert "opencc_config: t2s.json" in schema
+    assert "lua_processor@*mirrorme_capture" in schema
     assert "import_tables:" in dictionary
     assert "schema: mirrorme_pinyin" in default_patch
 
@@ -30,3 +32,7 @@ def test_system_ime_install_script_keeps_weasel_external_and_deploys_schema() ->
     assert "$null -ne $LASTEXITCODE" in script
     assert "Weasel writes a full schema_list" in script
     assert "schema: mirrorme_pinyin[ \\t]*" in script
+    assert "EnableSystemCapture" in script
+    assert "mirrorme_capture.lua" in script
+    assert "Test-RimeLuaSupport" in script
+    assert "lua_processor" in script

@@ -4,6 +4,7 @@ import re
 from collections import Counter
 from typing import Protocol
 
+from .composition import compose_events, source_event_ids
 
 class SummaryEvent(Protocol):
     id: str
@@ -32,7 +33,8 @@ STOP_WORDS = {
 
 
 def build_daily_summary(date: str, events: list[SummaryEvent]) -> dict[str, object]:
-    public_snippets = [event.redacted.strip() for event in events if event.redacted.strip()]
+    composed_events = compose_events(events)
+    public_snippets = [event.redacted.strip() for event in composed_events if event.redacted.strip()]
     source_ids = [event.id for event in events]
     decisions = _matching_sentences(public_snippets, DECISION_MARKERS)
     commitments = _matching_sentences(public_snippets, COMMITMENT_MARKERS)
@@ -42,12 +44,12 @@ def build_daily_summary(date: str, events: list[SummaryEvent]) -> dict[str, obje
         "date": date,
         "event_count": len(events),
         "summary": _overview(public_snippets),
-        "topics": _topics(events, public_snippets),
+        "topics": _topics(composed_events, public_snippets),
         "decisions": decisions,
         "commitments": commitments,
         "people": _people(public_snippets),
         "open_questions": open_questions,
-        "memory_candidates": _memory_candidates(events),
+        "memory_candidates": _memory_candidates(composed_events),
         "source_event_ids": source_ids,
     }
 
@@ -109,7 +111,7 @@ def _memory_candidates(events: list[SummaryEvent]) -> list[dict[str, object]]:
                         "kind": "preference",
                         "content": sentence,
                         "confidence": 0.55,
-                        "evidence_event_ids": [event.id],
+                        "evidence_event_ids": source_event_ids(event),
                     }
                 )
                 break
@@ -119,7 +121,7 @@ def _memory_candidates(events: list[SummaryEvent]) -> list[dict[str, object]]:
                         "kind": "decision",
                         "content": sentence,
                         "confidence": 0.62,
-                        "evidence_event_ids": [event.id],
+                        "evidence_event_ids": source_event_ids(event),
                     }
                 )
                 break

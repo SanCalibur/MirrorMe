@@ -7,6 +7,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from .ime_bridge import drain_system_ime_queue
 from .redaction import redact_text
 from .store import DEFAULT_DB_PATH, LOCAL_TZ, CapturePausedError, EventStore
 
@@ -223,6 +224,7 @@ def build_parser() -> argparse.ArgumentParser:
     ime_capture_parser.add_argument("--window-title", help="source window or document title")
     ime_capture_parser.add_argument("--project", help="project or workspace label")
     ime_capture_parser.add_argument("--created-at", help="ISO datetime or date for historical backfill")
+    ime_subparsers.add_parser("drain", help="store committed text from the local system IME queue")
     ime_subparsers.add_parser("schema", help="show sidecar schema metadata")
     ime_subparsers.add_parser("sidecar", help="run the built-in JSON-stdio IME sidecar")
 
@@ -310,6 +312,9 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
             print(json.dumps(payload, ensure_ascii=False, indent=2))
             return 0
+        if args.ime_command == "drain":
+            print(json.dumps(drain_system_ime_queue(EventStore(args.db)), ensure_ascii=False))
+            return 0
         if args.ime_command == "schema":
             try:
                 schema = schema_info()
@@ -326,6 +331,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     store = EventStore(args.db)
+    drain_system_ime_queue(store)
 
     if args.command == "add":
         try:

@@ -26,6 +26,25 @@ Current build:
 - Local Web UI with capture, daily review, event stream, memory candidate review,
   capture pause/resume, summary saving, redacted export, event deletion, and IME
   integration panel.
+- Manual text workbench for transient normalization, explicit replacements,
+  adjacent-duplicate removal, and output-state signals such as expression,
+  mood, stress, energy, organization, and social focus. It does not persist
+  processed text or poll the backend. A separate manual daily-observation action
+  persists versioned state signals with their source event ids for trend review;
+  its signals are not diagnoses.
+
+### LLM Text Cleaning
+
+The text workbench can optionally use an OpenAI Chat Completions-compatible LLM
+before the local replacement and assessment steps. Enter the API base URL (or a
+full `/chat/completions` endpoint), API key, and model in the expanded `使用 LLM
+清洗` panel. The key is sent only with that one local request and is not stored
+in SQLite or browser storage. Cleaning is instructed to preserve meaning and
+return only the cleaned text.
+
+Daily state observations are manual snapshots. Open `/state` for the dedicated
+local state-observation view and use its Refresh button when you deliberately
+want to load new records.
 - Chinese IME integration track based on `librime`, with a JSON-stdio sidecar
   protocol, Python stub sidecar, native C++ sidecar adapter, and commercial
   compliance manifest.
@@ -195,6 +214,31 @@ MirrorMe Rime files to `%APPDATA%\Rime`, adds the schema to `default.custom.yaml
 with a timestamped backup, and invokes Weasel deployment. Select `MirrorMe
 Pinyin` from the Weasel schema menu; it then becomes available through the
 normal Windows input switcher.
+
+### System Commit Capture
+
+With the optional `librime-lua` plugin installed in the local Weasel runtime,
+MirrorMe can capture only text that the `MirrorMe Pinyin` schema has already
+committed. The Rime callback appends it to a local queue in `%APPDATA%\Rime`;
+MirrorMe drains that queue into SQLite whenever its web API or CLI is used.
+Nothing is sent over the network, and keyboard events are not hooked.
+
+Enable the bridge only after installing a compatible runtime that includes the
+Lua plugin:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-system-ime.ps1 `
+  -WeaselRoot "C:\Program Files\Rime\weasel-0.17.4" `
+  -EnableSystemCapture
+```
+
+Use `uv run python -m mirrorme.cli ime drain` to explicitly consume pending
+commits, or open the local dashboard and refresh it. `pause` discards commits
+received while capture is paused instead of retaining them for later capture.
+When the backend is closed, the input method continues appending committed text
+to this local queue. The next local CLI or web-server run consumes it into
+SQLite; keep `%APPDATA%\Rime` available and avoid manually deleting the queue
+file while the backend is offline.
 
 Native sidecar adapter:
 

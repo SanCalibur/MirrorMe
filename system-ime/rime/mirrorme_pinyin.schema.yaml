@@ -23,6 +23,7 @@ engine:
     - selector
     - navigator
     - express_editor
+    - lua_processor@*mirrorme_capture
   segmentors:
     - ascii_segmentor
     - matcher
@@ -67,5 +68,5 @@ recognizer:
   import_preset: default
 
 simplifier:
-  opencc_config: s2t.json
+  opencc_config: t2s.json
   option_name: simplification

@@ -142,6 +142,81 @@ def test_daily_summary_extracts_structure(tmp_path: Path) -> None:
     ]
 
 
+def test_daily_summary_composes_adjacent_system_ime_commits(tmp_path: Path) -> None:
+    store = EventStore(tmp_path / "mirrorme.db")
+    first = store.add_text(
+        "我觉得",
+        source_method="system_ime_commit",
+        source_app="MirrorMe Pinyin (Weasel)",
+        created_at="2026-06-25T09:00:00+08:00",
+    )
+    second = store.add_text(
+        "这个功能需要优先完成。",
+        source_method="system_ime_commit",
+        source_app="MirrorMe Pinyin (Weasel)",
+        created_at="2026-06-25T09:00:03+08:00",
+    )
+
+    summary = store.daily_summary("2026-06-25")
+
+    assert summary["event_count"] == 2
+    assert summary["summary"] == "我觉得这个功能需要优先完成。"
+    assert summary["memory_candidates"] == [
+        {
+            "kind": "preference",
+            "content": "我觉得这个功能需要优先完成。",
+            "confidence": 0.55,
+            "evidence_event_ids": [first.id, second.id],
+        }
+    ]
+
+
+def test_daily_summary_extends_the_system_ime_window_after_each_commit(tmp_path: Path) -> None:
+    store = EventStore(tmp_path / "mirrorme.db")
+    first = store.add_text(
+        "我觉得",
+        source_method="system_ime_commit",
+        source_app="MirrorMe Pinyin (Weasel)",
+        created_at="2026-06-25T09:00:00+08:00",
+    )
+    second = store.add_text(
+        "这个功能",
+        source_method="system_ime_commit",
+        source_app="MirrorMe Pinyin (Weasel)",
+        created_at="2026-06-25T09:00:07+08:00",
+    )
+    third = store.add_text(
+        "需要优先完成。",
+        source_method="system_ime_commit",
+        source_app="MirrorMe Pinyin (Weasel)",
+        created_at="2026-06-25T09:00:14+08:00",
+    )
+
+    summary = store.daily_summary("2026-06-25")
+
+    assert summary["summary"] == "我觉得这个功能需要优先完成。"
+    assert summary["memory_candidates"][0]["evidence_event_ids"] == [first.id, second.id, third.id]
+
+
+def test_daily_state_assessments_are_versioned_and_follow_event_deletion(tmp_path: Path) -> None:
+    store = EventStore(tmp_path / "mirrorme.db")
+    event = store.add_text(
+        "我很焦虑，截止时间快到了，但我决定先完成最小下一步。",
+        created_at="2026-06-25T09:00:00+08:00",
+    )
+
+    first = store.save_daily_state_assessment("2026-06-25")
+    second = store.save_daily_state_assessment("2026-06-25")
+
+    assert first.version == 1
+    assert second.version == 2
+    assert first.source_event_ids == [event.id]
+    assert first.assessment["metrics"][2]["key"] == "mood"
+    assert store.list_state_assessments(latest_per_day=True) == [second]
+    assert store.delete_event(event.id) == 1
+    assert store.list_state_assessments() == []
+
+
 def test_accept_candidate_creates_memory_and_removes_from_pending_review(tmp_path: Path) -> None:
     store = EventStore(tmp_path / "mirrorme.db")
     event = store.add_text("\u6211\u51b3\u5b9a MirrorMe \u5148\u505a review loop\u3002")

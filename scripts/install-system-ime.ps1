@@ -4,6 +4,7 @@ param(
     [string]$WeaselRoot = "",
     [string]$RimeUserDir = (Join-Path $env:APPDATA "Rime"),
     [switch]$InstallWeasel,
+    [switch]$EnableSystemCapture,
     [switch]$SkipDeploy
 )
 
@@ -27,6 +28,17 @@ function Find-WeaselTool {
         }
     }
     return $null
+}
+
+function Test-RimeLuaSupport {
+    param([string]$WeaselDirectory)
+
+    $rimeDll = Join-Path $WeaselDirectory "rime.dll"
+    if (-not (Test-Path -LiteralPath $rimeDll)) {
+        return $false
+    }
+    $binaryText = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($rimeDll))
+    return $binaryText.Contains("lua_processor")
 }
 
 function Add-MirrorMeSchemaRegistration {
@@ -80,6 +92,7 @@ function Add-MirrorMeSchemaRegistration {
 $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 $schemaSource = Join-Path $repoRoot "system-ime\rime\mirrorme_pinyin.schema.yaml"
 $dictionarySource = Join-Path $repoRoot "system-ime\rime\mirrorme_pinyin.dict.yaml"
+$captureSource = Join-Path $repoRoot "system-ime\rime\lua\mirrorme_capture.lua"
 
 if ($InstallWeasel) {
     if (-not $WeaselSetup -or -not (Test-Path -LiteralPath $WeaselSetup)) {
@@ -102,6 +115,19 @@ if ($PSCmdlet.ShouldProcess($RimeUserDir, "Install MirrorMe Pinyin Rime configur
     New-Item -ItemType Directory -Force -Path $RimeUserDir | Out-Null
     Copy-Item -LiteralPath $schemaSource -Destination (Join-Path $RimeUserDir "mirrorme_pinyin.schema.yaml") -Force
     Copy-Item -LiteralPath $dictionarySource -Destination (Join-Path $RimeUserDir "mirrorme_pinyin.dict.yaml") -Force
+    $installedSchema = Join-Path $RimeUserDir "mirrorme_pinyin.schema.yaml"
+    if ($EnableSystemCapture) {
+        if (-not (Test-RimeLuaSupport -WeaselDirectory (Split-Path -Parent $deployer))) {
+            throw "System capture requires a librime runtime with lua_processor support. Install a compatible librime-lua runtime before rerunning with -EnableSystemCapture."
+        }
+        $luaDir = Join-Path $RimeUserDir "lua"
+        New-Item -ItemType Directory -Force -Path $luaDir | Out-Null
+        Copy-Item -LiteralPath $captureSource -Destination (Join-Path $luaDir "mirrorme_capture.lua") -Force
+    } else {
+        $schemaText = Get-Content -LiteralPath $installedSchema -Raw -Encoding UTF8
+        $schemaText = $schemaText -replace '(?m)^    - lua_processor@mirrorme_capture\r?\n', ''
+        Set-Content -LiteralPath $installedSchema -Value $schemaText -Encoding UTF8
+    }
     $changed = Add-MirrorMeSchemaRegistration -Path (Join-Path $RimeUserDir "default.custom.yaml")
 }
 
@@ -117,6 +143,7 @@ if (-not $SkipDeploy -and $PSCmdlet.ShouldProcess("Weasel", "Deploy MirrorMe Pin
     schema_name = "MirrorMe Pinyin"
     rime_user_dir = (Resolve-Path -LiteralPath $RimeUserDir).Path
     schema_registered = $changed
+    system_capture_enabled = [bool]$EnableSystemCapture
     deployer = $deployer
     deployed = -not $SkipDeploy
     next_step = "Choose MirrorMe Pinyin from the Weasel schema menu, then use the Windows input switcher."

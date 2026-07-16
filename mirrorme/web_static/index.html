@@ -1,159 +1,22 @@
 <!doctype html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>MirrorMe</title>
-    <link rel="stylesheet" href="/style.css" />
-  </head>
+  <head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>MirrorMe 工作台</title><link rel="stylesheet" href="/style.css" /></head>
   <body>
-    <main class="shell">
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">MirrorMe</p>
-          <h1>每日输出工作台</h1>
-        </div>
-        <div class="controls">
-          <input id="dateInput" type="date" />
-          <label class="toggle">
-            <input id="privateToggle" type="checkbox" />
-            <span>包含私密</span>
-          </label>
-          <button id="captureToggleButton" class="secondary" type="button">暂停</button>
-          <button id="refreshButton" type="button">刷新</button>
-        </div>
-      </header>
-
-      <section class="capture-panel">
-        <form id="captureForm">
-          <textarea id="textInput" name="text" rows="5" placeholder="记录刚刚说过或写过的内容"></textarea>
-          <div class="capture-fields">
-            <input id="projectInput" name="project" placeholder="项目" />
-            <input id="tagsInput" name="tags" placeholder="标签，用逗号分隔" />
-            <label class="toggle">
-              <input id="eventPrivateInput" name="is_private" type="checkbox" />
-              <span>私密</span>
-            </label>
-            <button type="submit">保存</button>
-          </div>
-        </form>
+    <main class="app-frame">
+      <aside class="sidebar">
+        <a class="brand" href="/" aria-label="MirrorMe 工作台"><span class="brand-mark">MM</span><span>MirrorMe</span></a>
+        <nav class="nav-list" aria-label="主导航"><a class="nav-item active" href="/">工作台</a><a class="nav-item" href="/state">状态观察</a></nav>
+        <div class="sidebar-note"><span class="note-dot"></span><p>本地优先<br />手动触发分析</p></div>
+      </aside>
+      <section class="workspace">
+        <header class="topbar"><div><p class="eyebrow">Daily output system</p><h1>今日工作台</h1></div><div class="top-actions"><label class="date-field"><span>日期</span><input id="dateInput" type="date" /></label><label class="privacy-toggle"><input id="privateToggle" type="checkbox" /><span>包含私密</span></label><button id="captureToggleButton" class="button ghost" type="button">暂停</button><button id="refreshButton" class="button primary" type="button">刷新数据</button></div></header>
+        <section class="capture-zone" aria-label="快速记录"><div class="section-kicker">Capture</div><form id="captureForm"><textarea id="textInput" name="text" rows="3" placeholder="写下刚刚完成、想清楚或不想遗漏的内容"></textarea><div class="capture-footer"><div class="capture-fields"><input id="projectInput" name="project" placeholder="项目" /><input id="tagsInput" name="tags" placeholder="标签，逗号分隔" /><label class="privacy-toggle"><input id="eventPrivateInput" name="is_private" type="checkbox" /><span>私密记录</span></label></div><button class="button primary" type="submit">保存记录</button></div></form></section>
+        <section class="metric-grid" aria-label="当日概览"><article class="metric metric-green"><span>记录</span><strong id="eventTotal">0</strong><small id="eventSplit">公开 0 / 私密 0</small></article><article class="metric metric-amber"><span>待确认记忆</span><strong id="pendingTotal">0</strong><small id="memoryTotal">已确认 0</small></article><article class="metric metric-blue"><span>摘要版本</span><strong id="summaryTotal">0</strong><small id="latestSummary">尚无保存版本</small></article><article class="metric metric-rose"><span>捕获状态</span><strong id="captureStatus">运行中</strong><small>本地 SQLite</small></article></section>
+        <section class="main-grid"><article class="panel summary-panel"><div class="panel-head"><div><p class="section-kicker">Overview</p><h2>当日摘要</h2></div><div class="inline-actions"><span id="summaryDate" class="muted"></span><button id="saveSummaryButton" class="button ghost compact" type="button">保存版本</button><button id="exportButton" class="button ghost compact" type="button">导出</button></div></div><p id="summaryText" class="summary-text">暂无内容</p><p id="actionStatus" class="action-status" aria-live="polite"></p><div id="topicList" class="tag-list"></div></article><article class="panel map-panel"><div class="panel-head"><div><p class="section-kicker">Context</p><h2>主题地图</h2></div></div><div class="context-columns"><div><h3>项目</h3><div id="projectList" class="tag-list"></div></div><div><h3>标签</h3><div id="tagList" class="tag-list"></div></div></div></article></section>
+        <section class="panel workbench-panel"><div class="panel-head"><div><p class="section-kicker">Text lab</p><h2>文本清洗与状态评估</h2></div><div class="inline-actions"><button id="loadSummaryButton" class="button ghost compact" type="button">载入摘要</button><button id="processTextButton" class="button primary compact" type="button">处理并评估</button><button id="saveDailyAssessmentButton" class="button ghost compact" type="button">留存当日观测</button></div></div><div class="workbench-grid"><div class="field-stack"><label for="workbenchInput">待处理文本</label><textarea id="workbenchInput" rows="8" placeholder="粘贴要清洗、替换和评估的文本"></textarea></div><div class="field-stack rules-side"><label for="replacementRules">替换规则</label><textarea id="replacementRules" rows="4" placeholder="旧词 => 新词&#10;项目名 => 规范名称"></textarea><label class="privacy-toggle"><input id="deduplicateInput" type="checkbox" checked /><span>移除完全重复的相邻句子</span></label><details class="llm-config"><summary>LLM 清洗配置</summary><label class="privacy-toggle"><input id="useLlmCleaner" type="checkbox" /><span>评估前调用 LLM</span></label><input id="llmApiUrl" type="url" autocomplete="off" placeholder="https://api.openai.com/v1" /><input id="llmApiKey" type="password" autocomplete="off" placeholder="API Key（仅本次请求使用）" /><input id="llmModel" type="text" autocomplete="off" placeholder="模型，例如 gpt-4.1-mini" /></details></div></div><p id="workbenchStatus" class="action-status">结果只在当前页面展示；状态观测需手动留存。</p><div id="workbenchResult" class="result-surface"></div><p id="evaluationDisclaimer" class="muted evaluation-disclaimer"></p><div id="evaluationList" class="evaluation-grid"></div><div id="suggestionList" class="suggestion-list"></div></section>
+        <section class="ime-panel panel"><div class="panel-head"><div><p class="section-kicker">Input method</p><h2>中文输入法</h2></div><div class="status-group"><span id="imeStatus">读取中</span><span id="imeMode" class="mode-badge">读取中</span></div></div><div class="ime-grid"><div><p class="label">选定引擎</p><strong id="imeEngine">-</strong><p id="imeLicense" class="muted">-</p></div><div><p class="label">商业适配度</p><strong id="imeFit">-</strong><p id="imeSource" class="muted">-</p></div><div><p class="label">捕获策略</p><div id="imePolicy" class="tag-list"></div></div><div><p class="label">原生适配</p><strong id="imeReadiness">-</strong><p id="imeBinary" class="muted">-</p></div></div><div class="ime-lab"><div class="field-stack"><label for="imeInput">协议试验台</label><input id="imeInput" placeholder="输入拼音，例如 ni hao / zhong wen" /><label class="privacy-toggle"><input id="imeCaptureDirect" type="checkbox" checked /><span>提交后直接进入分析</span></label></div><div id="imeCandidates" class="candidate-buttons"></div></div></section>
+        <section class="bottom-grid"><article class="panel"><div class="panel-head"><div><p class="section-kicker">Timeline</p><h2>事件流</h2></div><span id="eventDate" class="muted"></span></div><div id="eventList" class="event-list"></div></article><article class="panel"><div class="panel-head"><div><p class="section-kicker">Review</p><h2>记忆候选</h2></div><span class="muted">人工确认</span></div><div id="candidateList" class="candidate-list"></div></article></section>
       </section>
-
-      <section class="metric-grid" aria-label="今日概览">
-        <article>
-          <span>事件</span>
-          <strong id="eventTotal">0</strong>
-          <small id="eventSplit">公开 0 / 私密 0</small>
-        </article>
-        <article>
-          <span>待审核记忆</span>
-          <strong id="pendingTotal">0</strong>
-          <small id="memoryTotal">已确认 0</small>
-        </article>
-        <article>
-          <span>摘要版本</span>
-          <strong id="summaryTotal">0</strong>
-          <small id="latestSummary">尚无保存版本</small>
-        </article>
-        <article>
-          <span>捕获状态</span>
-          <strong id="captureStatus">运行中</strong>
-          <small>本地 SQLite</small>
-        </article>
-      </section>
-
-      <section class="dashboard">
-        <article class="summary-panel">
-          <div class="section-title">
-            <h2>摘要</h2>
-            <div class="inline-actions">
-              <span id="summaryDate"></span>
-              <button id="saveSummaryButton" class="secondary compact" type="button">保存摘要</button>
-              <button id="exportButton" class="secondary compact" type="button">导出</button>
-            </div>
-          </div>
-          <p id="summaryText" class="summary-text">暂无内容</p>
-          <p id="actionStatus" class="meta action-status"></p>
-          <div class="topic-list" id="topicList"></div>
-        </article>
-
-        <article class="activity-panel">
-          <div class="section-title">
-            <h2>主题地图</h2>
-          </div>
-          <div class="split-list">
-            <div>
-              <h3>项目</h3>
-              <div id="projectList" class="count-list"></div>
-            </div>
-            <div>
-              <h3>标签</h3>
-              <div id="tagList" class="count-list"></div>
-            </div>
-          </div>
-        </article>
-      </section>
-
-      <section class="ime-panel">
-        <article>
-          <div class="section-title">
-            <h2>中文输入法内置</h2>
-            <span id="imeStatus">读取中</span>
-            <span id="imeMode" class="ime-mode">读取中</span>
-          </div>
-          <div class="ime-grid">
-            <div>
-              <p class="label">选定引擎</p>
-              <strong id="imeEngine">-</strong>
-              <p id="imeLicense" class="meta">-</p>
-            </div>
-            <div>
-              <p class="label">商业内置适配度</p>
-              <strong id="imeFit">-</strong>
-              <p id="imeSource" class="meta">-</p>
-            </div>
-            <div>
-              <p class="label">捕获策略</p>
-              <div id="imePolicy" class="count-list"></div>
-            </div>
-            <div>
-              <p class="label">原生适配</p>
-              <strong id="imeReadiness">-</strong>
-              <p id="imeBinary" class="meta">-</p>
-            </div>
-          </div>
-          <div class="ime-lab">
-            <div>
-              <p class="label">协议试验台</p>
-              <input id="imeInput" placeholder="输入拼音，例如 ni hao / zhong wen" />
-              <label class="toggle ime-capture-toggle">
-                <input id="imeCaptureDirect" type="checkbox" checked />
-                <span>提交后直接进入分析</span>
-              </label>
-            </div>
-            <div id="imeCandidates" class="candidate-buttons"></div>
-          </div>
-        </article>
-      </section>
-
-      <section class="work-grid">
-        <article>
-          <div class="section-title">
-            <h2>事件流</h2>
-            <span id="eventDate"></span>
-          </div>
-          <div id="eventList" class="event-list"></div>
-        </article>
-
-        <article>
-          <div class="section-title">
-            <h2>记忆候选</h2>
-            <span>人工确认</span>
-          </div>
-          <div id="candidateList" class="candidate-list"></div>
-        </article>
-      </section>
-    </main>
-    <script src="/app.js"></script>
+    </main><script src="/app.js"></script>
   </body>
 </html>
