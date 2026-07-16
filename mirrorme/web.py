@@ -7,6 +7,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .ime import input_method_status
+from .composition import compose_events
 from .ime_bridge import drain_system_ime_queue
 from .ime_capture import capture_ime_commit
 from .ime_sidecar import SidecarError
@@ -153,10 +154,11 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
                 if parsed.path == "/api/daily/llm-clean":
                     date = str(payload.get("date", "")) or None
                     events = self.store.list_by_date(date, include_private=False)
-                    source_text = "\n".join(f"[{event.created_at[11:19]}] {event.redacted}" for event in events if event.redacted.strip())
+                    composed_events = compose_events(events)
+                    source_text = "\n".join(f"[{event.created_at[11:19]}] {event.redacted}" for event in composed_events if event.redacted.strip())
                     cleaned = clean_text_with_llm(text=source_text, api_url=str(payload.get("api_url", "")), api_key=str(payload.get("api_key", "")), model=str(payload.get("model", "")), prompt=str(payload.get("prompt", "")))
                     document = self.store.save_cleaned_document(date=date or datetime.now().date().isoformat(), content=cleaned, source_event_ids=[event.id for event in events], model=str(payload.get("model", "")), prompt=str(payload.get("prompt", "")))
-                    self._send_json({"document": _cleaned_document_to_json(document), "source_event_count": len(events), "output": cleaned})
+                    self._send_json({"document": _cleaned_document_to_json(document), "source_event_count": len(events), "composed_event_count": len(composed_events), "output": cleaned})
                     return
                 if parsed.path.startswith("/api/cleaned-documents/") and parsed.path.endswith("/accept"):
                     document_id = parsed.path.removeprefix("/api/cleaned-documents/").removesuffix("/accept").rstrip("/")
