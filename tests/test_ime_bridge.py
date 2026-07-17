@@ -45,6 +45,33 @@ def test_drain_uses_the_input_method_commit_timestamp(tmp_path: Path) -> None:
     assert store.list_events()[0].created_at == "2026-07-16T21:25:38+08:00"
 
 
+def test_drain_persists_continuous_system_ime_commits_as_one_event(tmp_path: Path) -> None:
+    queue = tmp_path / "mirrorme-ime-commits.ndjson"
+    queue.write_text(
+        "\n".join(
+            json.dumps({"version": 1, "created_at": created_at, "text": text})
+            for created_at, text in [
+                ("2026-07-17T13:57:06+08:00", "修改"),
+                ("2026-07-17T13:57:11+08:00", "功能选项"),
+                ("2026-07-17T13:57:12+08:00", "为"),
+                ("2026-07-17T13:57:16+08:00", "一下样式"),
+                ("2026-07-17T13:57:19+08:00", "和动效"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    store = EventStore(tmp_path / "mirrorme.db")
+
+    result = drain_system_ime_queue(store, queue_path=queue)
+
+    events = store.list_events()
+    assert result == {"captured": 5, "discarded": 0, "paused": 0}
+    assert len(events) == 1
+    assert events[0].raw == "修改功能选项为一下样式和动效"
+    assert events[0].created_at == "2026-07-17T13:57:19+08:00"
+
+
 def test_drain_system_ime_queue_discards_commits_while_capture_is_paused(tmp_path: Path) -> None:
     queue = tmp_path / "mirrorme-ime-commits.ndjson"
     queue.write_text(json.dumps({"version": 1, "text": "Do not retain this"}) + "\n", encoding="utf-8")

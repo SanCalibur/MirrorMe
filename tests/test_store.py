@@ -159,14 +159,15 @@ def test_daily_summary_composes_adjacent_system_ime_commits(tmp_path: Path) -> N
 
     summary = store.daily_summary("2026-06-25")
 
-    assert summary["event_count"] == 2
+    assert first.id == second.id
+    assert summary["event_count"] == 1
     assert summary["summary"] == "我觉得这个功能需要优先完成。"
     assert summary["memory_candidates"] == [
         {
             "kind": "preference",
             "content": "我觉得这个功能需要优先完成。",
             "confidence": 0.55,
-            "evidence_event_ids": [first.id, second.id],
+                "evidence_event_ids": [first.id],
         }
     ]
 
@@ -195,7 +196,8 @@ def test_daily_summary_extends_the_system_ime_window_after_each_commit(tmp_path:
     summary = store.daily_summary("2026-06-25")
 
     assert summary["summary"] == "我觉得这个功能需要优先完成。"
-    assert summary["memory_candidates"][0]["evidence_event_ids"] == [first.id, second.id, third.id]
+    assert first.id == second.id == third.id
+    assert summary["memory_candidates"][0]["evidence_event_ids"] == [first.id]
 
 
 def test_daily_state_assessments_are_versioned_and_follow_event_deletion(tmp_path: Path) -> None:

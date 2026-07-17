@@ -11,7 +11,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from .redaction import redact_text
-from .composition import compose_events
+from .composition import can_append_system_ime_event, compose_events, join_continuous_text
 from .summary import build_daily_summary
 from .text_workbench import evaluate_text
 
@@ -257,6 +257,35 @@ class EventStore:
             is_private=is_private,
         )
         with self._connect() as conn:
+            if event.source_method == "system_ime_commit":
+                previous_row = conn.execute(
+                    """
+                    select * from text_events
+                    where source_method = ? and source_app = ? and project is ? and is_private = ?
+                    order by created_at desc limit 1
+                    """,
+                    (event.source_method, event.source_app, event.project, 1 if event.is_private else 0),
+                ).fetchone()
+                if previous_row is not None:
+                    previous = self._row_to_event(previous_row)
+                    if can_append_system_ime_event(previous, event):
+                        merged = TextEvent(
+                            id=previous.id,
+                            raw=join_continuous_text(previous.raw, event.raw),
+                            redacted=join_continuous_text(previous.redacted, event.redacted),
+                            created_at=event.created_at,
+                            source_method=previous.source_method,
+                            source_app=previous.source_app,
+                            window_title=previous.window_title,
+                            project=previous.project,
+                            tags=previous.tags,
+                            is_private=previous.is_private,
+                        )
+                        conn.execute(
+                            "update text_events set raw = ?, redacted = ?, created_at = ? where id = ?",
+                            (merged.raw, merged.redacted, merged.created_at, merged.id),
+                        )
+                        return merged
             conn.execute(
                 """
                 insert into text_events (

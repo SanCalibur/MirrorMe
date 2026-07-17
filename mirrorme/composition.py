@@ -38,11 +38,11 @@ def compose_events(events: list[ComposableEvent]) -> list[ComposableEvent | Comp
     composed: list[ComposableEvent | ComposedEvent] = []
     for event in events:
         previous = composed[-1] if composed else None
-        if isinstance(previous, ComposedEvent) and _can_append(previous, event):
+        if isinstance(previous, ComposedEvent) and can_append_system_ime_event(previous, event):
             composed[-1] = ComposedEvent(
                 id=previous.id,
                 source_event_ids=[*previous.source_event_ids, event.id],
-                redacted=_join_text(previous.redacted, event.redacted),
+                redacted=join_continuous_text(previous.redacted, event.redacted),
                 created_at=previous.created_at,
                 last_created_at=event.created_at,
                 source_method=previous.source_method,
@@ -78,17 +78,18 @@ def source_event_ids(event: ComposableEvent | ComposedEvent) -> list[str]:
     return [event.id]
 
 
-def _can_append(previous: ComposedEvent, event: ComposableEvent) -> bool:
+def can_append_system_ime_event(previous: ComposableEvent | ComposedEvent, event: ComposableEvent) -> bool:
     if event.source_method != "system_ime_commit" or previous.source_app != event.source_app:
         return False
     if previous.project != event.project or previous.is_private != event.is_private:
         return False
     if re.search(r"[.!?。！？]$", previous.redacted):
         return False
-    return _seconds_between(previous.last_created_at, event.created_at) <= SYSTEM_IME_GROUP_GAP_SECONDS
+    previous_created_at = previous.last_created_at if isinstance(previous, ComposedEvent) else previous.created_at
+    return 0 <= _seconds_between(previous_created_at, event.created_at) <= SYSTEM_IME_GROUP_GAP_SECONDS
 
 
-def _join_text(previous: str, next_text: str) -> str:
+def join_continuous_text(previous: str, next_text: str) -> str:
     if re.search(r"[A-Za-z0-9]$", previous) and re.match(r"[A-Za-z0-9]", next_text):
         return f"{previous} {next_text}"
     return f"{previous}{next_text}"
