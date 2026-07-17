@@ -1,95 +1,95 @@
-import { ArrowDownRight, ArrowUpRight, CalendarDays, LockKeyhole, Quote, Sparkles, Target } from "lucide-react"
+import { Activity, Brain, CalendarDays, ChevronLeft, ChevronRight, CircleAlert, Gauge, LockKeyhole, MessageSquare, Sparkles, Target, TrendingDown, TrendingUp } from "lucide-react"
 import { useMemo, useState } from "react"
 
-type DemoDay = {
-  date: string
-  clarity: number
-  pressure: number
-  action: number
-  mood: number
-  inputs: number
-  summary: string
-  evidence: string
-  nextStep: string
-}
+type MetricKey = "clarity" | "organization" | "affect" | "pressure" | "action" | "social"
+type DemoDay = { date: string; inputs: number; confidence: number; summary: string; evidence: string; nextStep: string; scores: Record<MetricKey, number> }
 
-const summaries = [
-  "表达更聚焦，开始把模糊想法转成清晰的下一步。",
-  "任务密度较高，但句子里仍保留了推进与取舍的线索。",
-  "思路出现短暂分散，适合减少并行事项，先完成一个小闭环。",
-  "沟通更直接，关键判断和边界表达得更清楚。",
-  "压力信号回落，行动感稳定，适合整理本周的有效方法。",
+const metrics: Array<{ key: MetricKey; label: string; short: string; description: string; positiveWhen: "higher" | "lower"; evidenceLens: string }> = [
+  { key: "clarity", label: "表达清晰", short: "清晰", description: "判断、边界、因果和下一步是否说得明确。", positiveWhen: "higher", evidenceLens: "查找明确判断、限定条件与行动对象。" },
+  { key: "organization", label: "思路组织", short: "组织", description: "叙述是否有层次，问题与结论能否被区分。", positiveWhen: "higher", evidenceLens: "查找拆解、顺序词和可追溯的理由。" },
+  { key: "affect", label: "情绪语气", short: "语气", description: "文本中呈现的情绪稳定性与表达张力。", positiveWhen: "higher", evidenceLens: "只观察措辞强度与情绪词，不判断心理状态。" },
+  { key: "pressure", label: "压力负荷", short: "压力", description: "任务拥挤、紧迫与反复受阻的语言信号。", positiveWhen: "lower", evidenceLens: "查找时间压力、堆叠任务和无解表述。" },
+  { key: "action", label: "行动推进", short: "行动", description: "文本是否从意图走向具体、可执行的动作。", positiveWhen: "higher", evidenceLens: "查找动词、截止点、步骤和完成反馈。" },
+  { key: "social", label: "社交取向", short: "协作", description: "对协作、沟通边界和他人反馈的表达方式。", positiveWhen: "higher", evidenceLens: "查找沟通对象、请求、承诺与边界。" },
 ]
 
-const evidence = [
-  "先把今天的数据整理出来，再决定下一步。",
-  "这个问题我先拆成两个部分处理。",
-  "现在有点急，但先完成最重要的一项。",
-  "我需要把判断依据写清楚，避免后面反复解释。",
-  "今天的节奏比前几天稳定一些。",
-]
+const summaries = ["表达开始从愿望句转向带条件的判断，行动线索增加。", "任务较多，但文本仍能保持优先级和收尾动作。", "出现多线程切换，建议先减少并行问题的数量。", "沟通对象和边界写得更清楚，返工风险降低。", "压力词减少，行动表述稳定，适合复盘有效方法。"]
+const evidence = ["先把今天的数据整理出来，再决定下一步。", "这个问题拆成两个部分处理，先完成可验证的一段。", "现在有点急，但我只处理最重要的一项。", "需要把判断依据写清楚，避免后面反复解释。", "今天的节奏更稳定，先把收尾做完。"]
+const nextSteps = ["保留一个 25 分钟单任务区间。", "将未决问题压缩为一个可验证的问题。", "在收尾前写下明天的第一步。", "为高压力事项补一个明确截止点。", "复用今天有效的表达结构。"]
 
-const nextSteps = ["保留一段 25 分钟的单任务时间。", "把未决问题压缩成一个可验证的问题。", "在收尾前写下明天的第一步。", "为高压力事项补一个明确的截止点。", "复用今天有效的表达结构。"]
-
+const bounded = (value: number) => Math.max(18, Math.min(92, value))
 const demoDays: DemoDay[] = Array.from({ length: 30 }, (_, index) => {
   const day = new Date("2026-06-18T12:00:00")
   day.setDate(day.getDate() + index)
-  const lift = Math.round(index * 0.55)
+  const progress = index * 0.52
   return {
     date: day.toISOString().slice(0, 10),
-    clarity: 58 + lift + Math.round(Math.sin(index * 0.72) * 8),
-    pressure: 67 - Math.round(index * 0.4) + Math.round(Math.cos(index * 0.6) * 9),
-    action: 48 + lift + Math.round(Math.sin(index * 0.44 + 1) * 10),
-    mood: 54 + Math.round(index * 0.35) + Math.round(Math.cos(index * 0.5) * 8),
     inputs: 14 + (index * 7) % 25,
+    confidence: 0.74 + ((index * 3) % 14) / 100,
     summary: summaries[index % summaries.length],
     evidence: evidence[index % evidence.length],
     nextStep: nextSteps[index % nextSteps.length],
+    scores: {
+      clarity: bounded(55 + progress + Math.sin(index * 0.72) * 8),
+      organization: bounded(52 + progress * 0.8 + Math.cos(index * 0.58) * 9),
+      affect: bounded(57 + progress * 0.45 + Math.sin(index * 0.47 + 1) * 7),
+      pressure: bounded(69 - progress * 0.82 + Math.cos(index * 0.61) * 9),
+      action: bounded(47 + progress * 1.2 + Math.sin(index * 0.44 + 1) * 10),
+      social: bounded(50 + progress * 0.5 + Math.cos(index * 0.38 + 2) * 8),
+    },
   }
-})
+}).map(day => ({ ...day, scores: Object.fromEntries(Object.entries(day.scores).map(([key, value]) => [key, Math.round(value)])) as Record<MetricKey, number> }))
 
-const formatDate = (value: string) => new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", weekday: "short" }).format(new Date(`${value}T12:00:00`))
-const compactDate = (value: string) => new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric" }).format(new Date(`${value}T12:00:00`))
-const average = (values: number[]) => Math.round(values.reduce((total, value) => total + value, 0) / values.length)
+const mean = (values: number[]) => Math.round(values.reduce((total, value) => total + value, 0) / values.length)
+const deviation = (values: number[]) => Math.round(Math.sqrt(values.reduce((total, value) => total + (value - mean(values)) ** 2, 0) / values.length))
+const dateLabel = (value: string, withWeekday = false) => new Intl.DateTimeFormat("zh-CN", withWeekday ? { month: "long", day: "numeric", weekday: "short" } : { month: "numeric", day: "numeric" }).format(new Date(`${value}T12:00:00`))
+const deltaLabel = (metric: typeof metrics[number], delta: number) => {
+  const favorable = metric.positiveWhen === "higher" ? delta >= 0 : delta <= 0
+  return { favorable, text: `${delta >= 0 ? "+" : ""}${delta} 分` }
+}
 
-function Trend({ value, inverse = false }: { value: number; inverse?: boolean }) {
-  const positive = inverse ? value < 0 : value > 0
-  const Icon = positive ? ArrowUpRight : ArrowDownRight
-  return <span className={`inline-flex items-center gap-1 text-xs font-medium ${positive ? "text-emerald-700" : "text-rose-700"}`}><Icon size={14} />{Math.abs(value)} 分</span>
+function ScoreTone({ metric, value }: { metric: typeof metrics[number]; value: number }) {
+  const normalized = metric.positiveWhen === "lower" ? 100 - value : value
+  return <span className={normalized >= 72 ? "text-emerald-700" : normalized >= 50 ? "text-amber-700" : "text-rose-700"}>{value}</span>
 }
 
 export function MvpShowcase() {
   const [selectedIndex, setSelectedIndex] = useState(demoDays.length - 1)
+  const [selectedMetric, setSelectedMetric] = useState<MetricKey>("clarity")
   const selected = demoDays[selectedIndex]
-  const recent = demoDays.slice(-7)
-  const baseline = demoDays.slice(0, 7)
+  const metric = metrics.find(item => item.key === selectedMetric) ?? metrics[0]
+  const firstWeek = demoDays.slice(0, 7)
+  const recentWeek = demoDays.slice(-7)
+  const values = demoDays.map(day => day.scores[selectedMetric])
+  const baseline = mean(firstWeek.map(day => day.scores[selectedMetric]))
+  const recent = mean(recentWeek.map(day => day.scores[selectedMetric]))
+  const delta = recent - baseline
   const chart = useMemo(() => {
-    const width = 920
-    const height = 270
-    const top = 18
-    const bottom = 34
+    const width = 860
+    const height = 250
+    const top = 16
+    const bottom = 32
     const plotHeight = height - top - bottom
-    const point = (value: number, index: number) => `${16 + index * (width - 32) / (demoDays.length - 1)},${top + plotHeight - value / 100 * plotHeight}`
-    return { width, height, top, plotHeight, line: (key: "clarity" | "pressure" | "action") => demoDays.map((day, index) => point(day[key], index)).join(" "), point }
-  }, [])
+    const point = (value: number, index: number) => ({ x: 14 + index * (width - 28) / (demoDays.length - 1), y: top + plotHeight - value / 100 * plotHeight })
+    const rolling = values.map((_, index) => mean(values.slice(Math.max(0, index - 6), index + 1)))
+    return { width, height, top, plotHeight, point, raw: values.map((value, index) => { const p = point(value, index); return `${p.x},${p.y}` }).join(" "), rolling: rolling.map((value, index) => { const p = point(value, index); return `${p.x},${p.y}` }).join(" ") }
+  }, [values])
+  const displayDelta = deltaLabel(metric, delta)
 
-  return <div className="pb-8">
-    <section className="border-b border-zinc-200 pb-8">
-      <div className="flex flex-wrap items-center justify-between gap-4"><p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[.16em] text-emerald-700"><Sparkles size={15} />MVP demo dataset</p><span className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-600"><CalendarDays size={14} />2026.06.18 - 2026.07.17</span></div>
-      <div className="mt-6 grid gap-8 lg:grid-cols-[1.3fr_.7fr] lg:items-end"><div><h1 className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">30 天的表达，<br />能看见一个人正在怎样前进。</h1><p className="mt-5 max-w-2xl text-base leading-7 text-zinc-600">这不是给人贴标签，而是把零散输入沉淀为可回看的连续观察：什么时候更清楚，何时压力升高，哪些方式真正帮助你推进。</p></div><div className="border-l-2 border-emerald-700 pl-5"><p className="text-xs font-semibold uppercase tracking-[.14em] text-emerald-700">30-day signal</p><p className="mt-3 text-2xl font-semibold tracking-tight">表达清晰度 +18</p><p className="mt-2 text-sm leading-6 text-zinc-600">最近 7 天的压力负荷较首周下降 12 分，行动推进保持上升。</p></div></div>
-    </section>
+  return <div className="pb-10">
+    <section className="border-b border-zinc-200 pb-8"><div className="flex flex-wrap items-center justify-between gap-4"><p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[.16em] text-emerald-700"><Sparkles size={15} />MVP demo dataset</p><span className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-600"><CalendarDays size={14} />2026.06.18 - 2026.07.17</span></div><div className="mt-6 grid gap-8 lg:grid-cols-[1.25fr_.75fr] lg:items-end"><div><h1 className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">30 天的表达，<br />不是印象，是一组可核验的变化。</h1><p className="mt-5 max-w-2xl text-base leading-7 text-zinc-600">把每天清洗后的公开输入转为固定口径的六维观察。趋势、波动、文本证据和数据质量一起呈现，才能区分真正的持续变化与偶然的一天。</p></div><div className="border-l-2 border-emerald-700 pl-5"><p className="text-xs font-semibold uppercase tracking-[.14em] text-emerald-700">Executive readout</p><p className="mt-3 text-xl font-semibold leading-7">行动推进在近 7 日高于首周，压力负荷同步回落。</p><p className="mt-2 text-sm leading-6 text-zinc-600">这是演示集中的可观察信号，不是健康或人格判断。</p></div></div></section>
 
-    <section className="grid gap-4 py-7 md:grid-cols-3"><article className="border-t-2 border-zinc-950 pt-4"><p className="text-sm text-zinc-500">连续观察</p><p className="mt-2 text-4xl font-semibold tracking-tight">30 <span className="text-lg font-medium text-zinc-500">天</span></p><p className="mt-2 text-sm text-zinc-600">每日一份可追溯的文本观察</p></article><article className="border-t-2 border-emerald-600 pt-4"><p className="text-sm text-zinc-500">有效输入</p><p className="mt-2 text-4xl font-semibold tracking-tight">{demoDays.reduce((total, day) => total + day.inputs, 0)} <span className="text-lg font-medium text-zinc-500">段</span></p><p className="mt-2 text-sm text-zinc-600">只以清洗后、用户允许的公开文本为依据</p></article><article className="border-t-2 border-amber-500 pt-4"><p className="text-sm text-zinc-500">可行动洞见</p><p className="mt-2 text-4xl font-semibold tracking-tight">6 <span className="text-lg font-medium text-zinc-500">项</span></p><p className="mt-2 text-sm text-zinc-600">从趋势变化转译为下一步建议</p></article></section>
+    <section className="grid gap-4 border-b border-zinc-200 py-7 sm:grid-cols-2 xl:grid-cols-4"><article className="border-t-2 border-zinc-950 pt-4"><p className="text-sm text-zinc-500">观察覆盖</p><p className="mt-2 text-3xl font-semibold">30 / 30</p><p className="mt-2 text-sm text-zinc-600">连续日期均有可用文本</p></article><article className="border-t-2 border-emerald-600 pt-4"><p className="text-sm text-zinc-500">有效输入</p><p className="mt-2 text-3xl font-semibold">{demoDays.reduce((total, day) => total + day.inputs, 0)} 段</p><p className="mt-2 text-sm text-zinc-600">平均 {mean(demoDays.map(day => day.inputs))} 段 / 日</p></article><article className="border-t-2 border-amber-500 pt-4"><p className="text-sm text-zinc-500">观察置信度</p><p className="mt-2 text-3xl font-semibold">{Math.round(mean(demoDays.map(day => day.confidence * 100)))}%</p><p className="mt-2 text-sm text-zinc-600">受输入量与证据完整度约束</p></article><article className="border-t-2 border-sky-600 pt-4"><p className="text-sm text-zinc-500">比较口径</p><p className="mt-2 text-3xl font-semibold">6 维</p><p className="mt-2 text-sm text-zinc-600">同一提示词、同一评分范围</p></article></section>
 
-    <section className="border-y border-zinc-200 py-7"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="text-xs font-semibold uppercase tracking-[.14em] text-emerald-700">Continuity over snapshots</p><h2 className="mt-2 text-2xl font-semibold tracking-tight">趋势不是分数的堆叠，是变化的方向。</h2></div><div className="flex flex-wrap gap-4 text-xs text-zinc-600"><span className="inline-flex items-center gap-2"><i className="h-2 w-2 rounded-full bg-zinc-950" />表达清晰</span><span className="inline-flex items-center gap-2"><i className="h-2 w-2 rounded-full bg-emerald-600" />行动推进</span><span className="inline-flex items-center gap-2"><i className="h-2 w-2 rounded-full bg-amber-500" />压力负荷</span></div></div>
-      <div className="mt-6 overflow-x-auto"><svg viewBox={`0 0 ${chart.width} ${chart.height}`} className="min-w-[700px] w-full" role="img" aria-label="30 日观察趋势图">{[25, 50, 75].map(value => <line key={value} x1="16" x2={chart.width - 16} y1={chart.top + chart.plotHeight - value / 100 * chart.plotHeight} y2={chart.top + chart.plotHeight - value / 100 * chart.plotHeight} stroke="#e4e4e7" />)}<polyline points={chart.line("clarity")} fill="none" stroke="#18181b" strokeWidth="3" strokeLinecap="round" /><polyline points={chart.line("action")} fill="none" stroke="#059669" strokeWidth="3" strokeLinecap="round" /><polyline points={chart.line("pressure")} fill="none" stroke="#d97706" strokeWidth="3" strokeLinecap="round" />{demoDays.map((day, index) => { const [x, y] = chart.point(day.clarity, index).split(","); return <g key={day.date} onClick={() => setSelectedIndex(index)} className="cursor-pointer"><circle cx={x} cy={y} r={index === selectedIndex ? 5 : 3} fill={index === selectedIndex ? "#18181b" : "white"} stroke="#18181b" strokeWidth="2" /><text x={x} y={chart.height - 10} textAnchor="middle" fill="#71717a" fontSize="11">{index % 5 === 0 || index === demoDays.length - 1 ? compactDate(day.date) : ""}</text></g>})}</svg></div>
-      <div className="mt-4 grid grid-cols-10 gap-1 sm:grid-cols-15">{demoDays.map((day, index) => <button key={day.date} onClick={() => setSelectedIndex(index)} title={formatDate(day.date)} aria-label={`查看 ${formatDate(day.date)} 的观察`} className={`h-8 rounded-sm transition ${index === selectedIndex ? "bg-zinc-950" : "bg-emerald-100 hover:bg-emerald-300"}`} style={{ opacity: 0.35 + day.inputs / 55 }} />)}</div>
-    </section>
+    <section className="py-8"><div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end"><div><p className="text-xs font-semibold uppercase tracking-[.14em] text-emerald-700">Dimension panel</p><h2 className="mt-2 text-2xl font-semibold tracking-tight">先看完整结构，再下钻到一个信号。</h2><p className="mt-2 text-sm leading-6 text-zinc-600">近 7 日与首周的比较使用同一维度的日均分；波动度为 30 日标准差，帮助判断信号是否稳定。</p></div><p className="inline-flex items-center gap-2 text-xs text-zinc-500"><CircleAlert size={14} />分数只适合同一人的纵向比较</p></div><div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{metrics.map(item => { const recentScore = mean(recentWeek.map(day => day.scores[item.key])); const baselineScore = mean(firstWeek.map(day => day.scores[item.key])); const change = deltaLabel(item, recentScore - baselineScore); const active = item.key === selectedMetric; return <button key={item.key} onClick={() => setSelectedMetric(item.key)} className={`border p-4 text-left transition ${active ? "border-zinc-950 bg-zinc-950 text-white" : "border-zinc-200 bg-white hover:border-zinc-400"}`}><div className="flex items-start justify-between gap-4"><div><p className={`text-sm font-medium ${active ? "text-white" : "text-zinc-900"}`}>{item.label}</p><p className={`mt-1 text-xs leading-5 ${active ? "text-zinc-300" : "text-zinc-500"}`}>{item.description}</p></div><strong className={`text-2xl ${active ? "text-white" : ""}`}><ScoreTone metric={item} value={recentScore} /></strong></div><div className={`mt-4 flex items-center justify-between border-t pt-3 text-xs ${active ? "border-zinc-700 text-zinc-200" : "border-zinc-100 text-zinc-600"}`}><span>首周 {baselineScore} / 近 7 日 {recentScore}</span><span className={active ? "text-emerald-300" : change.favorable ? "text-emerald-700" : "text-rose-700"}>{change.text}</span></div></button> })}</div></section>
 
-    <section className="grid gap-8 py-8 lg:grid-cols-[1.2fr_.8fr]"><div><div className="flex items-center gap-2"><Quote size={18} className="text-emerald-700" /><h2 className="text-2xl font-semibold tracking-tight">{formatDate(selected.date)} 的观察</h2></div><p className="mt-5 max-w-2xl text-xl leading-8 text-zinc-800">{selected.summary}</p><blockquote className="mt-6 border-l-2 border-zinc-300 pl-4 text-sm leading-6 text-zinc-600">“{selected.evidence}”</blockquote><div className="mt-7 flex flex-wrap gap-2"><span className="rounded-full bg-zinc-100 px-3 py-1.5 text-xs text-zinc-600">{selected.inputs} 段公开输入</span><span className="rounded-full bg-zinc-100 px-3 py-1.5 text-xs text-zinc-600">置信度 82%</span><span className="rounded-full bg-zinc-100 px-3 py-1.5 text-xs text-zinc-600">可回看证据</span></div></div><aside className="border border-zinc-200 bg-white p-5"><div className="flex items-center gap-2"><Target size={17} className="text-emerald-700" /><h3 className="font-medium">把观察变成下一步</h3></div><p className="mt-4 text-lg font-medium leading-7">{selected.nextStep}</p><p className="mt-4 border-t border-zinc-100 pt-4 text-sm leading-6 text-zinc-600">产品不替你下结论。它把文本中的持续信号和依据摆出来，让你决定要保留、调整还是忽略什么。</p></aside></section>
+    <section className="border-y border-zinc-200 py-8"><div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[.14em] text-emerald-700">Thirty-day matrix</p><h2 className="mt-2 text-2xl font-semibold tracking-tight">30 × 6：不只看均值，也看变化发生在哪一天。</h2></div><div className="flex items-center gap-3 text-xs text-zinc-500"><span>低</span><span className="h-3 w-20 rounded-sm bg-gradient-to-r from-zinc-100 via-emerald-200 to-emerald-700" /><span>高</span></div></div><div className="mt-6 overflow-x-auto"><div className="min-w-[760px]"><div className="grid grid-cols-[5rem_repeat(30,minmax(0,1fr))] gap-1 text-[10px] text-zinc-400"> <span />{demoDays.map((day, index) => <span key={day.date} className="text-center">{index % 5 === 0 || index === 29 ? dateLabel(day.date) : ""}</span>)}</div><div className="mt-2 space-y-1">{metrics.map(item => <div key={item.key} className="grid grid-cols-[5rem_repeat(30,minmax(0,1fr))] gap-1"><span className="flex items-center text-xs font-medium text-zinc-600">{item.short}</span>{demoDays.map((day, index) => <button key={day.date} onClick={() => { setSelectedMetric(item.key); setSelectedIndex(index) }} title={`${dateLabel(day.date, true)} · ${item.label} ${day.scores[item.key]}`} aria-label={`查看 ${dateLabel(day.date, true)} ${item.label} ${day.scores[item.key]} 分`} className={`h-7 rounded-sm transition hover:ring-2 hover:ring-zinc-950 ${selectedIndex === index && selectedMetric === item.key ? "ring-2 ring-zinc-950" : ""}`} style={{ backgroundColor: `rgb(${232 - day.scores[item.key] * 1.3}, ${245 - day.scores[item.key] * 0.45}, ${236 - day.scores[item.key] * 1.1})` }} />)}</div>)}</div></div></div></section>
 
-    <section className="grid gap-4 border-t border-zinc-200 py-8 md:grid-cols-3"><article className="border border-zinc-200 bg-white p-5"><p className="text-sm font-medium">表达清晰度</p><p className="mt-3 text-3xl font-semibold">{average(recent.map(day => day.clarity))}</p><div className="mt-2"><Trend value={average(recent.map(day => day.clarity)) - average(baseline.map(day => day.clarity))} /></div><p className="mt-4 text-sm leading-6 text-zinc-600">更常出现明确的判断、边界和下一步，而不是只有模糊意图。</p></article><article className="border border-zinc-200 bg-white p-5"><p className="text-sm font-medium">压力负荷</p><p className="mt-3 text-3xl font-semibold">{average(recent.map(day => day.pressure))}</p><div className="mt-2"><Trend inverse value={average(recent.map(day => day.pressure)) - average(baseline.map(day => day.pressure))} /></div><p className="mt-4 text-sm leading-6 text-zinc-600">用趋势识别压力峰值出现的周期，而不是把某一天当作结论。</p></article><article className="border border-zinc-200 bg-white p-5"><p className="text-sm font-medium">行动推进</p><p className="mt-3 text-3xl font-semibold">{average(recent.map(day => day.action))}</p><div className="mt-2"><Trend value={average(recent.map(day => day.action)) - average(baseline.map(day => day.action))} /></div><p className="mt-4 text-sm leading-6 text-zinc-600">观察“说到做到”的语言线索是否变得更稳定、更可持续。</p></article></section>
+    <section className="grid gap-8 py-8 lg:grid-cols-[1.15fr_.85fr]"><div><div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.14em] text-emerald-700">Metric drill-down</p><h2 className="mt-2 text-2xl font-semibold tracking-tight">{metric.label}：最近 7 日 {recent} 分</h2></div><div className="text-right text-sm text-zinc-600"><p>首周 {baseline} 分</p><p className={`mt-1 inline-flex items-center gap-1 font-medium ${displayDelta.favorable ? "text-emerald-700" : "text-rose-700"}`}>{displayDelta.favorable ? <TrendingUp size={15} /> : <TrendingDown size={15} />}{displayDelta.text}</p></div></div><div className="mt-5 overflow-x-auto border-y border-zinc-200 py-4"><svg viewBox={`0 0 ${chart.width} ${chart.height}`} className="min-w-[680px] w-full" role="img" aria-label={`${metric.label} 30 日趋势图`}>{[25, 50, 75].map(value => <g key={value}><line x1="14" x2={chart.width - 14} y1={chart.top + chart.plotHeight - value / 100 * chart.plotHeight} y2={chart.top + chart.plotHeight - value / 100 * chart.plotHeight} stroke="#e4e4e7" /><text x={chart.width - 14} y={chart.top + chart.plotHeight - value / 100 * chart.plotHeight - 4} textAnchor="end" fill="#a1a1aa" fontSize="11">{value}</text></g>)}<polyline points={chart.raw} fill="none" stroke="#a1a1aa" strokeWidth="2" strokeLinecap="round" /><polyline points={chart.rolling} fill="none" stroke="#18181b" strokeWidth="3" strokeLinecap="round" />{demoDays.map((day, index) => { const point = chart.point(day.scores[selectedMetric], index); return <circle key={day.date} onClick={() => setSelectedIndex(index)} cx={point.x} cy={point.y} r={index === selectedIndex ? 5 : 3} fill={index === selectedIndex ? "#059669" : "white"} stroke="#18181b" strokeWidth="1.5" className="cursor-pointer" /> })}</svg></div><div className="mt-4 grid gap-3 sm:grid-cols-3"><div><p className="text-xs text-zinc-500">30 日均值</p><p className="mt-1 text-xl font-semibold">{mean(values)}</p></div><div><p className="text-xs text-zinc-500">30 日波动度</p><p className="mt-1 text-xl font-semibold">{deviation(values)} <span className="text-sm font-normal text-zinc-500">分</span></p></div><div><p className="text-xs text-zinc-500">观察视角</p><p className="mt-1 text-sm leading-5 text-zinc-700">{metric.evidenceLens}</p></div></div></div>
+      <aside className="border border-zinc-200 bg-white p-5"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[.14em] text-emerald-700">Selected day</p><h2 className="mt-2 text-xl font-semibold">{dateLabel(selected.date, true)}</h2></div><button type="button" onClick={() => setSelectedIndex(index => Math.max(0, index - 1))} disabled={selectedIndex === 0} aria-label="查看前一天" className="rounded-md border border-zinc-200 p-2 text-zinc-700 disabled:opacity-30"><ChevronLeft size={16} /></button><button type="button" onClick={() => setSelectedIndex(index => Math.min(demoDays.length - 1, index + 1))} disabled={selectedIndex === demoDays.length - 1} aria-label="查看后一天" className="rounded-md border border-zinc-200 p-2 text-zinc-700 disabled:opacity-30"><ChevronRight size={16} /></button></div><p className="mt-5 text-sm leading-6 text-zinc-800">{selected.summary}</p><blockquote className="mt-5 border-l-2 border-zinc-300 pl-3 text-sm leading-6 text-zinc-600">“{selected.evidence}”</blockquote><div className="mt-5 grid grid-cols-2 gap-x-5 gap-y-3 border-y border-zinc-100 py-4">{metrics.map(item => <div key={item.key} className="flex items-center justify-between gap-3 text-xs"><span className="text-zinc-500">{item.short}</span><strong><ScoreTone metric={item} value={selected.scores[item.key]} /></strong></div>)}</div><div className="mt-5 flex items-start gap-3"><Target size={17} className="mt-0.5 shrink-0 text-emerald-700" /><div><p className="text-sm font-medium">建议的最小动作</p><p className="mt-1 text-sm leading-6 text-zinc-600">{selected.nextStep}</p></div></div><div className="mt-5 flex items-start gap-3 border-t border-zinc-100 pt-4"><Gauge size={17} className="mt-0.5 shrink-0 text-emerald-700" /><p className="text-xs leading-5 text-zinc-500">{selected.inputs} 段公开输入，观察置信度 {Math.round(selected.confidence * 100)}%。输入不足时，产品应降低断言强度，而非补全推测。</p></div></aside></section>
 
-    <section className="flex flex-col gap-4 border-t border-zinc-200 pt-6 text-sm text-zinc-600 sm:flex-row sm:items-start"><LockKeyhole size={17} className="mt-0.5 shrink-0 text-emerald-700" /><p>演示数据为本地生成的产品样本。真实使用时，观察仅基于用户主动允许的公开输入；LLM 配置与 API Key 不写入 SQLite。该产品用于文本行为观察，不构成医疗、心理或人格诊断。</p></section>
+    <section className="grid gap-4 border-t border-zinc-200 py-8 lg:grid-cols-3"><article className="border border-zinc-200 bg-white p-5"><div className="flex items-center gap-2"><Activity size={17} className="text-emerald-700" /><h3 className="font-medium">可见的长期变化</h3></div><p className="mt-4 text-sm leading-6 text-zinc-700">本演示集里，行动推进与表达清晰的近 7 日均值都高于首周。产品只报告同一口径下的变化，不把分数解释为能力高低。</p></article><article className="border border-zinc-200 bg-white p-5"><div className="flex items-center gap-2"><Brain size={17} className="text-emerald-700" /><h3 className="font-medium">需要继续验证的信号</h3></div><p className="mt-4 text-sm leading-6 text-zinc-700">思路组织的波动仍然存在。下一步应在高波动日期回看证据，确认是场景变化、输入量变化，还是可重复的模式。</p></article><article className="border border-zinc-200 bg-white p-5"><div className="flex items-center gap-2"><MessageSquare size={17} className="text-emerald-700" /><h3 className="font-medium">面向使用者的价值</h3></div><p className="mt-4 text-sm leading-6 text-zinc-700">从“我最近感觉怎么样”变成“哪些表达信号在何时变化、依据是什么、我今天可尝试什么”。</p></article></section>
+
+    <section className="flex gap-4 border-t border-zinc-200 pt-6 text-sm text-zinc-600"><LockKeyhole size={17} className="mt-0.5 shrink-0 text-emerald-700" /><p>本页为本地生成的演示数据。真实观察只基于用户主动允许的公开输入；每项结论都应保留模型版本、提示词版本、清洗版本、输入量和文本证据。该产品用于文本行为观察，不构成医疗、心理或人格诊断。</p></section>
   </div>
 }

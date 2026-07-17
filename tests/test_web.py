@@ -252,7 +252,9 @@ def test_frontend_includes_a_self_contained_thirty_day_mvp_showcase() -> None:
     assert 'path === "/showcase"' in app
     assert "Array.from({ length: 30 }" in showcase
     assert "30 天的表达" in showcase
-    assert "演示数据为本地生成的产品样本" in showcase
+    assert "本页为本地生成的演示数据" in showcase
+    assert "30 × 6" in showcase
+    assert "30 日波动度" in showcase
 
 
 def test_frontend_marks_ime_engine_mode_and_prevents_stale_candidates() -> None:
