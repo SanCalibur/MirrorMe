@@ -1,5 +1,5 @@
-import { BarChart3, Database, KeyRound, Settings2, SlidersHorizontal } from "lucide-react"
-import { useEffect, useState } from "react"
+import { BarChart3, Database, KeyRound, Menu, Settings2, SlidersHorizontal, X } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 import { AnalysisWorkspace } from "./components/analysis-workspace"
 import { Card, CardContent } from "./components/ui/card"
 
@@ -11,9 +11,34 @@ async function api<T>(url: string, init?: RequestInit) { const r = await fetch(u
 const DEFAULT_CLEANING_PROMPT = "你是文本清洗助手。仅输出清洗后的原文，不要解释。保留原意、事实、专有名词、数字、时间顺序和不确定性；修正明显空白、断句、重复片段、口语填充词与标点。不要总结、扩写、改写立场或编造内容。"
 const DEFAULT_OBSERVATION_PROMPT = "基于当天已清洗文本做审慎的状态观察。重点评估表达准确性、思路组织、情绪语气、压力负荷、行动推进和社交取向；每项必须引用具体文本证据，并明确不确定性。避免诊断、标签化或超出文本的推断。"
 
+function FluidNavigation({ path }: { path: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const container = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const closeOnOutsidePress = (event: MouseEvent) => {
+      if (!container.current?.contains(event.target as Node)) setExpanded(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setExpanded(false)
+    }
+    document.addEventListener("mousedown", closeOnOutsidePress)
+    document.addEventListener("keydown", closeOnEscape)
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsidePress)
+      document.removeEventListener("keydown", closeOnEscape)
+    }
+  }, [])
+
+  return <div ref={container} className="relative h-12 w-12">
+    <button type="button" onClick={() => setExpanded(value => !value)} className="relative z-20 grid h-12 w-12 place-items-center rounded-full bg-zinc-950 text-white shadow-[0_8px_18px_rgba(24,24,27,.18)] transition duration-300 ease-out hover:-translate-y-0.5 hover:bg-emerald-700 active:translate-y-0 motion-reduce:transition-none" aria-label={expanded ? "关闭功能选项" : "打开功能选项"} aria-expanded={expanded} aria-controls="primary-functions" title={expanded ? "关闭功能选项" : "功能选项"}><span className="relative h-5 w-5"><Menu className={`absolute inset-0 h-5 w-5 transition duration-300 ${expanded ? "rotate-90 scale-0 opacity-0" : "rotate-0 scale-100 opacity-100"}`} strokeWidth={1.8} /><X className={`absolute inset-0 h-5 w-5 transition duration-300 ${expanded ? "rotate-0 scale-100 opacity-100" : "-rotate-90 scale-0 opacity-0"}`} strokeWidth={1.8} /></span></button>
+    <div id="primary-functions" className="absolute right-0 top-0 z-10" aria-hidden={!expanded}>{pages.map(({ href, label, icon: Icon }, index) => <a key={href} href={href} onClick={() => setExpanded(false)} aria-label={label} title={label} tabIndex={expanded ? 0 : -1} className={`absolute right-0 top-0 grid h-12 w-12 place-items-center rounded-full border text-sm shadow-[0_8px_18px_rgba(24,24,27,.12)] transition-[transform,opacity,background-color] duration-300 ease-out motion-reduce:transition-none ${path === href ? "border-emerald-600 bg-emerald-600 text-white" : "border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-100 hover:text-zinc-950"} ${expanded ? "opacity-100" : "pointer-events-none opacity-0"}`} style={{ transform: `translateY(${expanded ? (index + 1) * 42 : 0}px)`, transitionDelay: expanded ? `${index * 45}ms` : `${(pages.length - 1 - index) * 35}ms` }}><Icon size={19} strokeWidth={1.7} /></a>)}</div>
+  </div>
+}
+
 function Shell({ children }: { children: React.ReactNode }) {
   const path = window.location.pathname === "/" ? "/capture" : window.location.pathname
-  return <div className="min-h-screen bg-zinc-50 text-zinc-950"><header className="border-b border-zinc-200 bg-white"><div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4"><a href="/capture" className="font-semibold tracking-tight">MirrorMe</a><nav className="flex gap-1">{pages.map(({ href, label, icon: Icon }) => <a key={href} href={href} className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${path === href ? "bg-zinc-950 text-white" : "text-zinc-500 hover:bg-zinc-100"}`}><Icon size={15} />{label}</a>)}</nav></div></header><main className="mx-auto max-w-6xl px-6 py-10">{children}</main></div>
+  return <div className="min-h-screen bg-zinc-50 text-zinc-950"><header className="border-b border-zinc-200 bg-white"><div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4"><a href="/capture" className="font-semibold tracking-tight">MirrorMe</a><FluidNavigation path={path} /></div></header><main className="mx-auto max-w-6xl px-6 py-10">{children}</main></div>
 }
 
 function Capture() {

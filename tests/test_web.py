@@ -214,6 +214,17 @@ def test_frontend_provides_default_llm_prompts_for_first_time_settings() -> None
     assert 'sessionStorage.getItem("llm_observation_prompt") || DEFAULT_OBSERVATION_PROMPT' in source
 
 
+def test_frontend_uses_the_fluid_icon_navigation() -> None:
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+
+    assert "function FluidNavigation" in source
+    assert 'id="primary-functions"' in source
+    assert "closeOnOutsidePress" in source
+    assert "closeOnEscape" in source
+    assert "<FluidNavigation path={path} />" in source
+
+
 def test_frontend_marks_ime_engine_mode_and_prevents_stale_candidates() -> None:
     root = Path(__file__).resolve().parents[1]
     app = (root / "mirrorme" / "web_static" / "app.js").read_text(encoding="utf-8")
