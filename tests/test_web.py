@@ -80,6 +80,24 @@ def test_web_serves_the_separate_state_observatory_page(tmp_path: Path) -> None:
     assert "/assets/" in body
 
 
+def test_web_serves_the_mvp_showcase_page(tmp_path: Path) -> None:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), create_handler(tmp_path / "mirrorme.db"))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+
+    try:
+        with urlopen(f"{base_url}/showcase", timeout=5) as response:
+            body = response.read().decode("utf-8")
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert response.status == 200
+    assert '<div id="root"></div>' in body
+
+
 def test_web_api_exposes_input_method_status(tmp_path: Path) -> None:
     server = ThreadingHTTPServer(("127.0.0.1", 0), create_handler(tmp_path / "mirrorme.db"))
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -223,6 +241,18 @@ def test_frontend_uses_the_fluid_icon_navigation() -> None:
     assert "closeOnOutsidePress" in source
     assert "closeOnEscape" in source
     assert "<FluidNavigation path={path} />" in source
+
+
+def test_frontend_includes_a_self_contained_thirty_day_mvp_showcase() -> None:
+    root = Path(__file__).resolve().parents[1]
+    app = (root / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+    showcase = (root / "frontend" / "src" / "components" / "mvp-showcase.tsx").read_text(encoding="utf-8")
+
+    assert 'href: "/showcase"' in app
+    assert 'path === "/showcase"' in app
+    assert "Array.from({ length: 30 }" in showcase
+    assert "30 天的表达" in showcase
+    assert "演示数据为本地生成的产品样本" in showcase
 
 
 def test_frontend_marks_ime_engine_mode_and_prevents_stale_candidates() -> None:

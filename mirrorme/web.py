@@ -42,7 +42,7 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
         def do_GET(self) -> None:
             drain_system_ime_queue(self.store)
             parsed = urlparse(self.path)
-            if parsed.path in {"/", "/state", "/capture", "/analysis", "/settings"}:
+            if parsed.path in {"/", "/state", "/capture", "/analysis", "/showcase", "/settings"}:
                 self._send_static("index.html")
                 return
             if parsed.path.startswith("/assets/"):

@@ -1,9 +1,10 @@
-import { BarChart3, Database, KeyRound, Menu, Settings2, SlidersHorizontal, X } from "lucide-react"
+import { BarChart3, Database, KeyRound, Menu, Presentation, Settings2, SlidersHorizontal, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { AnalysisWorkspace } from "./components/analysis-workspace"
+import { MvpShowcase } from "./components/mvp-showcase"
 import { Card, CardContent } from "./components/ui/card"
 
-const pages = [{ href: "/capture", label: "数据采集", icon: Database }, { href: "/analysis", label: "数据解读", icon: BarChart3 }, { href: "/settings", label: "设置", icon: Settings2 }]
+const pages = [{ href: "/capture", label: "数据采集", icon: Database }, { href: "/analysis", label: "数据解读", icon: BarChart3 }, { href: "/showcase", label: "MVP 展示", icon: Presentation }, { href: "/settings", label: "设置", icon: Settings2 }]
 const date = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" }).format(new Date())
 const captureDate = () => new URLSearchParams(window.location.search).get("date") || date()
 async function api<T>(url: string, init?: RequestInit) { const r = await fetch(url, init); if (!r.ok) throw new Error(await r.text()); return r.json() as Promise<T> }
@@ -53,6 +54,8 @@ function Capture() {
 
 function Analysis() { return <Shell><AnalysisWorkspace /></Shell> }
 
+function Showcase() { return <Shell><MvpShowcase /></Shell> }
+
 function Settings() { const [url, setUrl] = useState(sessionStorage.getItem("llm_url") || ""); const [model, setModel] = useState(sessionStorage.getItem("llm_model") || ""); const [key, setKey] = useState(sessionStorage.getItem("llm_key") || ""); const [cleaningPrompt, setCleaningPrompt] = useState(sessionStorage.getItem("llm_prompt") || "只输出清洗后的原文。保留原意、事实、专有名词、数字和不确定性；修正明显空白、断句、重复片段、填充词和标点。不要总结、扩写或编造。"); const [observationPrompt, setObservationPrompt] = useState(sessionStorage.getItem("llm_observation_prompt") || "重点关注表达是否清晰、压力线索的语境、行动推进与不确定性。引用具体文本证据，避免过度推断。"); const save = () => { sessionStorage.setItem("llm_url", url); sessionStorage.setItem("llm_model", model); sessionStorage.setItem("llm_key", key); sessionStorage.setItem("llm_prompt", cleaningPrompt); sessionStorage.setItem("llm_observation_prompt", observationPrompt) }; return <Shell><p className="text-xs font-semibold uppercase tracking-[.15em] text-emerald-700">Rules & API</p><h1 className="mt-2 text-4xl font-semibold tracking-tight">设置规则，<br />再决定如何处理数据。</h1><div className="mt-8 grid gap-4 lg:grid-cols-2"><Card><CardContent><KeyRound /><h2 className="mt-4 font-medium">LLM API 与提示词</h2><div className="mt-4 grid gap-3"><input value={url} onChange={e => setUrl(e.target.value)} className="rounded-lg border border-zinc-200 p-3" placeholder="API URL" /><input value={model} onChange={e => setModel(e.target.value)} className="rounded-lg border border-zinc-200 p-3" placeholder="Model" /><input value={key} onChange={e => setKey(e.target.value)} type="password" className="rounded-lg border border-zinc-200 p-3" placeholder="API Key（仅当前浏览器会话）" /><label className="text-xs text-zinc-500">清洗提示词<textarea value={cleaningPrompt} onChange={e => setCleaningPrompt(e.target.value)} rows={5} className="mt-1 rounded-lg border border-zinc-200 p-3" placeholder="LLM 清洗提示词" /></label><label className="text-xs text-zinc-500">每日观察提示词<textarea value={observationPrompt} onChange={e => setObservationPrompt(e.target.value)} rows={7} className="mt-1 rounded-lg border border-zinc-200 p-3" placeholder="LLM 每日观察提示词" /></label></div><button onClick={save} className="mt-4 rounded-lg bg-zinc-950 px-4 py-2 text-sm text-white">保存会话设置</button></CardContent></Card><Card><CardContent><SlidersHorizontal /><h2 className="mt-4 font-medium">观察边界</h2><p className="mt-5 text-sm leading-6 text-zinc-700">LLM 观察只会在你手动确认清洗稿并点击“LLM 观察并留存”时运行。它必须返回结构化维度、文本证据与置信度。</p><p className="mt-6 text-sm leading-6 text-zinc-500">仅发送公开事件形成的已接受清洗文本。推荐使用本地 LLM；API Key 仅保存在当前浏览器会话，不写入 SQLite。</p></CardContent></Card></div></Shell> }
 void Settings
 
@@ -98,4 +101,4 @@ function BatchSettings() {
   </Shell>
 }
 
-export default function App() { const path = window.location.pathname; return path === "/analysis" || path === "/state" ? <Analysis /> : path === "/settings" ? <BatchSettings /> : <Capture /> }
+export default function App() { const path = window.location.pathname; return path === "/analysis" || path === "/state" ? <Analysis /> : path === "/showcase" ? <Showcase /> : path === "/settings" ? <BatchSettings /> : <Capture /> }
