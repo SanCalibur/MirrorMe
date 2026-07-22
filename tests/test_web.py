@@ -2,8 +2,11 @@ import json
 import threading
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from unittest.mock import patch
+
+import pytest
 
 from mirrorme.store import EventStore
 from mirrorme.web import create_handler
@@ -333,11 +336,31 @@ def test_web_api_saves_and_lists_daily_state_assessments(tmp_path: Path) -> None
     assert [record["id"] for record in records_in_range] == [saved["id"]]
 
 
+def test_web_api_saves_feedback_for_the_specific_assessment_version(tmp_path: Path) -> None:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), create_handler(tmp_path / "mirrorme.db"))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+
+    try:
+        _post_json(f"{base_url}/api/events", {"text": "A source event", "created_at": "2026-06-25T09:00:00+08:00"})
+        saved = _post_json(f"{base_url}/api/state-assessments/daily", {"date": "2026-06-25"})
+        feedback = _post_json(f"{base_url}/api/state-assessments/{saved['id']}/feedback", {"verdict": "accurate", "note": "Matches the day."})
+        [record] = _get_json(f"{base_url}/api/state-assessments?date=2026-06-25")
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert feedback["feedback"]["verdict"] == "accurate"
+    assert record["feedback"]["note"] == "Matches the day."
+
+
 def test_web_api_saves_llm_observation_from_an_accepted_document(tmp_path: Path) -> None:
     db_path = tmp_path / "mirrorme.db"
     store = EventStore(db_path)
-    event = store.add_text("A daily source", created_at="2026-06-25T09:00:00+08:00")
-    document = store.save_cleaned_document(date="2026-06-25", content="A daily source", source_event_ids=[event.id], model="cleaner", prompt="clean")
+    events = [store.add_text(f"A daily source {index}", created_at=f"2026-06-25T09:0{index}:00+08:00") for index in range(3)]
+    document = store.save_cleaned_document(date="2026-06-25", content="A daily source " * 30, source_event_ids=[event.id for event in events], model="cleaner", prompt="clean")
     store.accept_cleaned_document(document.id)
     observation = {"method": "llm", "metrics": [], "summary": "A structured observation", "data_quality": "sufficient", "confidence": 0.8, "model": "observer", "prompt_hash": "hash"}
 
@@ -356,14 +379,37 @@ def test_web_api_saves_llm_observation_from_an_accepted_document(tmp_path: Path)
 
     assert saved["assessment"]["method"] == "llm"
     assert saved["assessment"]["cleaned_document_id"] == document.id
+    assert saved["assessment"]["quality"]["status"] == "sufficient"
     assert [record["id"] for record in records] == [saved["id"]]
+
+
+def test_web_rejects_llm_observation_when_the_accepted_text_is_too_short(tmp_path: Path) -> None:
+    db_path = tmp_path / "mirrorme.db"
+    store = EventStore(db_path)
+    event = store.add_text("Short", created_at="2026-06-25T09:00:00+08:00")
+    document = store.save_cleaned_document(date="2026-06-25", content="Short", source_event_ids=[event.id], model="cleaner", prompt="clean")
+    store.accept_cleaned_document(document.id)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), create_handler(db_path))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+
+    try:
+        with pytest.raises(HTTPError) as error:
+            _post_json(f"{base_url}/api/state-assessments/llm", {"document_id": document.id, "api_url": "http://local", "api_key": "key", "model": "observer", "prompt": "focus"})
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert error.value.code == 422
 
 
 def test_web_api_batch_processes_public_dates_and_skips_existing_observations(tmp_path: Path) -> None:
     db_path = tmp_path / "mirrorme.db"
     store = EventStore(db_path)
     first = store.add_text("First public day", created_at="2026-06-24T09:00:00+08:00")
-    second = store.add_text("Second public day", created_at="2026-06-25T09:00:00+08:00")
+    second = store.add_text("Second public day " * 20, created_at="2026-06-25T09:00:00+08:00")
     store.add_text("Private day", is_private=True, created_at="2026-06-26T09:00:00+08:00")
     existing = store.save_cleaned_document(date="2026-06-24", content="First public day", source_event_ids=[first.id], model="cleaner", prompt="clean")
     existing = store.accept_cleaned_document(existing.id)

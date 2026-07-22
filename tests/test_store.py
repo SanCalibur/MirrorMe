@@ -248,6 +248,18 @@ def test_llm_state_assessments_are_saved_from_accepted_documents_and_filterable(
     assert store.list_state_assessments(method="rules") == []
 
 
+def test_assessment_feedback_is_version_specific_and_can_be_revised(tmp_path: Path) -> None:
+    store = EventStore(tmp_path / "mirrorme.db")
+    record = store.save_daily_state_assessment("2026-06-25")
+
+    first = store.save_assessment_feedback(record.id, "accurate", note="与当天表达一致")
+    revised = store.save_assessment_feedback(record.id, "uncertain")
+
+    assert first["verdict"] == "accurate"
+    assert revised["verdict"] == "uncertain"
+    assert revised["note"] is None
+
+
 def test_event_dates_excludes_private_events_by_default(tmp_path: Path) -> None:
     store = EventStore(tmp_path / "mirrorme.db")
     store.add_text("Public", created_at="2026-06-24T09:00:00+08:00")

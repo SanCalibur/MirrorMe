@@ -9,6 +9,7 @@ type Assessment = {
   created_at: string
   source_event_ids: string[]
   assessment: { metrics: Metric[]; source_event_count: number; input_scope?: string; summary?: string; confidence?: number; data_quality?: string; model?: string; prompt_hash?: string; evaluator_version?: string; cleaned_document_version?: number }
+  feedback?: { verdict: "accurate" | "inaccurate" | "uncertain"; note?: string | null; updated_at: string }
 }
 
 type RangeDays = 7 | 30 | 90
@@ -26,6 +27,22 @@ async function getJson<T>(url: string) {
   const response = await fetch(url)
   if (!response.ok) throw new Error(await response.text())
   return response.json() as Promise<T>
+}
+
+function FeedbackControls({ assessment }: { assessment: Assessment }) {
+  const [verdict, setVerdict] = useState<"accurate" | "inaccurate" | "uncertain" | "">(assessment.feedback?.verdict ?? "")
+  const [note, setNote] = useState(assessment.feedback?.note ?? "")
+  const [status, setStatus] = useState("")
+  const labels = { accurate: "准确", inaccurate: "不准确", uncertain: "不确定" }
+  const submit = async (value: "accurate" | "inaccurate" | "uncertain") => {
+    setVerdict(value); setStatus("正在保存反馈...")
+    try {
+      const response = await fetch(`/api/state-assessments/${assessment.id}/feedback`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ verdict: value, note }) })
+      if (!response.ok) throw new Error(await response.text())
+      setStatus(`已标记为“${labels[value]}”。`)
+    } catch (error) { setStatus(error instanceof Error ? `保存失败：${error.message}` : "保存失败。") }
+  }
+  return <section className="border-t border-zinc-200 py-6"><p className="text-sm font-medium">这份观察符合你的实际体验吗？</p><p className="mt-1 text-xs leading-5 text-zinc-500">反馈只绑定当前评估版本，用于后续校准提示词与质量规则，不会自动改变历史分数。</p><div className="mt-3 flex flex-wrap gap-2">{(["accurate", "inaccurate", "uncertain"] as const).map(value => <button key={value} onClick={() => void submit(value)} className={`rounded-md border px-3 py-2 text-xs font-medium ${verdict === value ? "border-zinc-950 bg-zinc-950 text-white" : "border-zinc-300 bg-white text-zinc-600 hover:border-zinc-600"}`}>{labels[value]}</button>)}</div><label className="mt-3 block text-xs text-zinc-500">校准说明（可选）<textarea value={note} onChange={event => setNote(event.target.value)} maxLength={500} rows={2} className="mt-1 w-full rounded-md border border-zinc-300 bg-white p-2 text-sm text-zinc-800" /></label>{verdict && <button onClick={() => void submit(verdict)} className="mt-2 text-xs font-medium text-emerald-700 hover:text-emerald-900">保存说明</button>}<p className="mt-2 text-xs text-zinc-500" aria-live="polite">{status}</p></section>
 }
 
 function score(record: Assessment, key: string) { return record.assessment.metrics.find((metric) => metric.key === key)?.score ?? 0 }
@@ -99,7 +116,7 @@ export function AnalysisWorkspace() {
       <section className="grid border-t border-zinc-200 py-8 lg:grid-cols-[1fr_19rem] lg:gap-12"><div><div className="flex items-center gap-2"><LineChart size={18} className="text-emerald-700" /><h2 className="text-xl font-semibold tracking-tight">当日解读</h2></div><div className="mt-5 divide-y divide-zinc-200 border-y border-zinc-200">{selected?.assessment.metrics.map((metric) => { const before = previous ? score(previous, metric.key) : undefined; const delta = before === undefined ? "区间内没有前一日可比较" : metric.score === before ? "与前一条观察持平" : `较前一条观察${metric.score > before ? "上升" : "下降"} ${Math.abs(metric.score - before)} 分`; return <article key={metric.key} className="grid gap-3 py-5 sm:grid-cols-[10rem_4.5rem_1fr] sm:items-center"><p className="font-medium">{metric.label}</p><strong className={`text-2xl font-semibold ${scoreClass(metric.key, metric.score)}`}>{metric.score}</strong><div><p className="text-sm leading-6 text-zinc-700">{metric.detail}</p><p className="mt-1 text-xs text-zinc-500">{delta}</p>{metric.evidence?.map((item) => <blockquote key={item} className="mt-2 border-l-2 border-zinc-300 pl-3 text-xs leading-5 text-zinc-500">“{item}”</blockquote>)}</div></article> })}</div></div>
         <aside className="mt-8 lg:mt-0"><div className="border-b border-zinc-200 pb-5"><div className="flex items-center gap-2 text-sm font-medium"><FileText size={16} />评估证据</div><dl className="mt-4 space-y-3 text-sm"><div className="flex justify-between gap-4"><dt className="text-zinc-500">输入范围</dt><dd className="text-right">{selected?.assessment.input_scope ?? "公开事件"}</dd></div><div className="flex justify-between gap-4"><dt className="text-zinc-500">来源事件</dt><dd>{selected?.source_event_ids.length ?? 0} 条</dd></div><div className="flex justify-between gap-4"><dt className="text-zinc-500">清洗版本</dt><dd>v{selected?.assessment.cleaned_document_version ?? "-"}</dd></div><div className="flex justify-between gap-4"><dt className="text-zinc-500">观察模型</dt><dd className="max-w-32 truncate">{selected?.assessment.model ?? "-"}</dd></div><div className="flex justify-between gap-4"><dt className="text-zinc-500">提示词版本</dt><dd>{selected?.assessment.prompt_hash?.slice(0, 8) ?? "-"}</dd></div><div className="flex justify-between gap-4"><dt className="text-zinc-500">当前版本</dt><dd>v{selected?.version}</dd></div><div className="flex justify-between gap-4"><dt className="text-zinc-500">生成时间</dt><dd>{selected?.created_at.slice(11, 16)}</dd></div></dl></div><div className="pt-5"><div className="flex items-center gap-2 text-sm font-medium"><Layers3 size={16} />同日历史版本</div><div className="mt-3 space-y-2">{versions.map((version) => <div key={version.id} className={`flex items-center justify-between border-l-2 py-2 pl-3 text-sm ${version.id === selected?.id ? "border-emerald-700" : "border-zinc-200"}`}><span>v{version.version} <span className="text-xs text-zinc-500">{version.created_at.slice(11, 16)}</span></span>{version.id === selected?.id && <Check size={15} className="text-emerald-700" />}</div>)}</div></div><a href={`/capture?date=${selectedDate}`} className="mt-6 flex items-center gap-1 text-sm font-medium text-emerald-700 hover:text-emerald-900">查看当天处理数据 <ChevronRight size={16} /></a></aside>
       </section>
-      <section className="border-t border-zinc-200 py-6"><p className="flex items-start gap-2 text-xs leading-5 text-zinc-500"><Info size={15} className="mt-0.5 shrink-0" />评估分数用于比较同一人的文本表达趋势。输入量、写作场景和清洗版本变化，都可能影响结果。</p></section>
+      {selected && <FeedbackControls key={selected.id} assessment={selected} />}<section className="border-t border-zinc-200 py-6"><p className="flex items-start gap-2 text-xs leading-5 text-zinc-500"><Info size={15} className="mt-0.5 shrink-0" />评估分数用于比较同一人的文本表达趋势。输入量、写作场景和清洗版本变化，都可能影响结果。</p></section>
     </>}
   </>
 }

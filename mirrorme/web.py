@@ -16,6 +16,7 @@ from .ime_sidecar import compose as ime_compose
 from .ime_sidecar import schema_info as ime_schema_info
 from .llm_cleaner import LlmCleaningError, clean_text_with_llm
 from .llm_observer import LlmObservationError, observe_text_with_llm
+from .observation_quality import apply_quality_gate, assess_observation_input
 from .store import DEFAULT_DB_PATH, CapturePausedError, EventStore
 from .text_workbench import process_text
 
@@ -75,7 +76,7 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
                     latest_per_day=_truthy(_first(params, "latest_per_day")),
                     limit=_positive_int(_first(params, "limit")),
                 )
-                self._send_json([_state_assessment_to_json(record) for record in records])
+                self._send_json([_state_assessment_to_json(record, feedback=self.store.get_assessment_feedback(record.id)) for record in records])
                 return
             if parsed.path == "/api/projects":
                 params = parse_qs(parsed.query)
@@ -172,10 +173,19 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
                         return
                     self._send_json({"document": _cleaned_document_to_json(accepted)})
                     return
+                if parsed.path.startswith("/api/state-assessments/") and parsed.path.endswith("/feedback"):
+                    assessment_id = parsed.path.removeprefix("/api/state-assessments/").removesuffix("/feedback").rstrip("/")
+                    feedback = self.store.save_assessment_feedback(assessment_id, str(payload.get("verdict", "")), note=str(payload.get("note", "")))
+                    self._send_json({"assessment_id": assessment_id, "feedback": feedback})
+                    return
                 if parsed.path == "/api/state-assessments/llm":
                     document = self.store.get_cleaned_document(str(payload.get("document_id", "")))
                     if document is None:
                         self._send_json({"error": "Cleaned document not found."}, status=404)
+                        return
+                    quality = assess_observation_input(document.content, len(document.source_event_ids))
+                    if not quality["can_observe"]:
+                        self._send_json({"error": "样本不足，暂不生成 LLM 观察。", "quality": quality}, status=422)
                         return
                     observation = observe_text_with_llm(
                         text=document.content,
@@ -184,6 +194,7 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
                         model=str(payload.get("model", "")),
                         prompt=str(payload.get("prompt", "")),
                     )
+                    observation = apply_quality_gate(observation, quality)
                     record = self.store.save_llm_state_assessment(document, observation)
                     self._send_json(_state_assessment_to_json(record), status=201)
                     return
@@ -208,7 +219,12 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
                             accepted = self.store.accept_cleaned_document(document.id)
                             if accepted is None:
                                 raise ValueError("无法接受刚生成的清洗文本。")
+                            quality = assess_observation_input(accepted.content, len(accepted.source_event_ids))
+                            if not quality["can_observe"]:
+                                skipped.append(date)
+                                continue
                             observation = observe_text_with_llm(text=accepted.content, api_url=str(payload.get("api_url", "")), api_key=str(payload.get("api_key", "")), model=str(payload.get("model", "")), prompt=str(payload.get("prompt", "")))
+                            observation = apply_quality_gate(observation, quality)
                             record = self.store.save_llm_state_assessment(accepted, observation)
                             processed.append({"date": date, "document_id": document.id, "assessment_id": record.id})
                         except (ValueError, LlmCleaningError, LlmObservationError) as exc:
@@ -355,8 +371,8 @@ def _summary_record_to_json(record: object) -> dict[str, object]:
     }
 
 
-def _state_assessment_to_json(record: object) -> dict[str, object]:
-    return {
+def _state_assessment_to_json(record: object, *, feedback: dict[str, str | None] | None = None) -> dict[str, object]:
+    result = {
         "id": record.id,
         "date": record.date,
         "version": record.version,
@@ -364,6 +380,9 @@ def _state_assessment_to_json(record: object) -> dict[str, object]:
         "assessment": record.assessment,
         "created_at": record.created_at,
     }
+    if feedback is not None:
+        result["feedback"] = feedback
+    return result
 
 
 def _cleaned_document_to_json(record: object) -> dict[str, object]:

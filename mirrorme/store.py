@@ -208,6 +208,17 @@ class EventStore:
             )
             conn.execute(
                 """
+                create table if not exists assessment_feedback (
+                    assessment_id text primary key,
+                    verdict text not null,
+                    note text,
+                    created_at text not null,
+                    updated_at text not null
+                )
+                """
+            )
+            conn.execute(
+                """
                 create table if not exists cleaned_documents (
                     id text primary key, date text not null, version integer not null,
                     content text not null, source_event_ids_json text not null,
@@ -651,6 +662,32 @@ class EventStore:
             rows = conn.execute("select * from cleaned_documents where date = ? order by version desc", (date,)).fetchall()
         return [self._row_to_cleaned_document(row) for row in rows]
 
+    def save_assessment_feedback(self, assessment_id: str, verdict: str, *, note: str | None = None) -> dict[str, str | None]:
+        if verdict not in {"accurate", "inaccurate", "uncertain"}:
+            raise ValueError("反馈必须是 accurate、inaccurate 或 uncertain。")
+        cleaned_note = note.strip() if note else None
+        if cleaned_note and len(cleaned_note) > 500:
+            raise ValueError("反馈备注不能超过500字。")
+        now = datetime.now(LOCAL_TZ).isoformat(timespec="seconds")
+        with self._connect() as conn:
+            exists = conn.execute("select 1 from state_assessments where id = ?", (assessment_id,)).fetchone()
+            if exists is None:
+                raise ValueError("观察记录不存在。")
+            conn.execute(
+                """
+                insert into assessment_feedback (assessment_id, verdict, note, created_at, updated_at)
+                values (?, ?, ?, ?, ?)
+                on conflict(assessment_id) do update set verdict = excluded.verdict, note = excluded.note, updated_at = excluded.updated_at
+                """,
+                (assessment_id, verdict, cleaned_note, now, now),
+            )
+        return self.get_assessment_feedback(assessment_id) or {}
+
+    def get_assessment_feedback(self, assessment_id: str) -> dict[str, str | None] | None:
+        with self._connect() as conn:
+            row = conn.execute("select verdict, note, created_at, updated_at from assessment_feedback where assessment_id = ?", (assessment_id,)).fetchone()
+        return dict(row) if row is not None else None
+
     def save_daily_summary(
         self,
         date: str | None = None,
@@ -907,6 +944,7 @@ class EventStore:
                 self._archive_memories_referencing_event(conn, event.id)
                 deleted += 1
             conn.execute("delete from daily_summaries where date = ?", (date,))
+            conn.execute("delete from assessment_feedback where assessment_id in (select id from state_assessments where date = ?)", (date,))
             conn.execute("delete from state_assessments where date = ?", (date,))
         return deleted
 
@@ -958,6 +996,7 @@ class EventStore:
             conn.execute("delete from memory_reviews")
             conn.execute("delete from memories")
             conn.execute("delete from daily_summaries")
+            conn.execute("delete from assessment_feedback")
             conn.execute("delete from state_assessments")
             conn.execute("delete from text_events")
             conn.execute("delete from settings")
@@ -1735,6 +1774,7 @@ class EventStore:
         for row in rows:
             source_event_ids = json.loads(row["source_event_ids_json"])
             if event_id in source_event_ids:
+                conn.execute("delete from assessment_feedback where assessment_id = ?", (row["id"],))
                 conn.execute("delete from state_assessments where id = ?", (row["id"],))
 
     def _import_event(self, conn: sqlite3.Connection, event: object, *, replace: bool) -> str:
