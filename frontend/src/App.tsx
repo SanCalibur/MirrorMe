@@ -37,9 +37,18 @@ function FluidNavigation({ path }: { path: string }) {
   </div>
 }
 
+function CaptureHealthIndicator() {
+  const [health, setHealth] = useState<{ pending_commits: number; processing_commits: number; recovery_required: boolean; last_captured_at: string | null } | null>(null)
+  useEffect(() => { void api<{ system_capture: { pending_commits: number; processing_commits: number; recovery_required: boolean; last_captured_at: string | null } }>("/api/ime/status").then(status => setHealth(status.system_capture)).catch(() => setHealth(null)) }, [])
+  const attention = (health?.pending_commits ?? 0) + (health?.processing_commits ?? 0) > 0 || health?.recovery_required
+  const tone = health === null ? "bg-zinc-300" : attention ? "bg-amber-500" : health.last_captured_at ? "bg-emerald-600" : "bg-zinc-400"
+  const label = health === null ? "正在读取采集状态" : health.recovery_required ? "输入法队列需要恢复" : attention ? `输入法队列待处理 ${health.pending_commits + health.processing_commits} 条` : health.last_captured_at ? `系统输入法最近采集：${health.last_captured_at.slice(11, 19)}` : "尚无系统输入法采集记录"
+  return <span title={label} aria-label={label} className="inline-flex items-center gap-2 text-xs text-zinc-500"><i className={`h-2 w-2 rounded-full ${tone}`} />采集</span>
+}
+
 function Shell({ children }: { children: React.ReactNode }) {
   const path = window.location.pathname === "/" ? "/capture" : window.location.pathname
-  return <div className="min-h-screen bg-zinc-50 text-zinc-950"><header className="border-b border-zinc-200 bg-white"><div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4"><a href="/capture" className="font-semibold tracking-tight">MirrorMe</a><FluidNavigation path={path} /></div></header><main className="mx-auto max-w-6xl px-6 py-10">{children}</main></div>
+  return <div className="min-h-screen bg-zinc-50 text-zinc-950"><header className="border-b border-zinc-200 bg-white"><div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4"><a href="/capture" className="font-semibold tracking-tight">MirrorMe</a><div className="flex items-center gap-4"><CaptureHealthIndicator /><FluidNavigation path={path} /></div></div></header><main className="mx-auto max-w-6xl px-6 py-10">{children}</main></div>
 }
 
 function Capture() {

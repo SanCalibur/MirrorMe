@@ -1,8 +1,10 @@
 import json
+import os
+import time
 from pathlib import Path
 from unittest.mock import patch
 
-from mirrorme.ime_bridge import drain_system_ime_queue
+from mirrorme.ime_bridge import PROCESSING_RECOVERY_SECONDS, drain_system_ime_queue, system_ime_queue_health
 from mirrorme.store import EventStore
 
 
@@ -112,3 +114,19 @@ def test_drain_leaves_a_locked_queue_for_a_later_request(tmp_path: Path) -> None
 
     assert queue.exists()
     assert store.list_events() == []
+
+
+def test_queue_health_reports_backlog_and_recovery_requirement(tmp_path: Path) -> None:
+    queue = tmp_path / "mirrorme-ime-commits.ndjson"
+    processing = queue.with_suffix(queue.suffix + ".processing")
+    queue.write_text(json.dumps({"version": 1, "text": "Queued"}) + "\ninvalid\n", encoding="utf-8")
+    processing.write_text(json.dumps({"version": 1, "text": "Recover"}) + "\n", encoding="utf-8")
+    old_time = time.time() - PROCESSING_RECOVERY_SECONDS - 1
+    os.utime(processing, (old_time, old_time))
+
+    health = system_ime_queue_health(queue_path=queue)
+
+    assert health["pending_commits"] == 1
+    assert health["invalid_pending_lines"] == 1
+    assert health["processing_commits"] == 1
+    assert health["recovery_required"] is True

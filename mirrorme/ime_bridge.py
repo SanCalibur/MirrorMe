@@ -22,6 +22,26 @@ def default_system_ime_queue_path() -> Path:
     return Path.home() / ".rime" / QUEUE_FILENAME
 
 
+def system_ime_queue_health(*, queue_path: Path | None = None) -> dict[str, object]:
+    queue = queue_path or default_system_ime_queue_path()
+    processing = queue.with_suffix(queue.suffix + ".processing")
+    pending = _queue_line_counts(queue)
+    processing_counts = _queue_line_counts(processing)
+    processing_age_seconds = None
+    if processing.exists():
+        processing_age_seconds = max(0, int(time.time() - processing.stat().st_mtime))
+    recovery_required = processing_age_seconds is not None and processing_age_seconds >= PROCESSING_RECOVERY_SECONDS
+    return {
+        "queue_path": str(queue),
+        "pending_commits": pending["valid"],
+        "invalid_pending_lines": pending["invalid"],
+        "processing_commits": processing_counts["valid"],
+        "invalid_processing_lines": processing_counts["invalid"],
+        "processing_age_seconds": processing_age_seconds,
+        "recovery_required": recovery_required,
+    }
+
+
 def drain_system_ime_queue(
     store: EventStore,
     *,
@@ -100,3 +120,20 @@ def _committed_text(line: str) -> tuple[str, str | None] | None:
         return None
     created_at = payload.get("created_at")
     return text, created_at if isinstance(created_at, str) else None
+
+
+def _queue_line_counts(path: Path) -> dict[str, int]:
+    if not path.exists():
+        return {"valid": 0, "invalid": 0}
+    valid = 0
+    invalid = 0
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return {"valid": 0, "invalid": 0}
+    for line in lines:
+        if _committed_text(line) is None:
+            invalid += 1
+        else:
+            valid += 1
+    return {"valid": valid, "invalid": invalid}

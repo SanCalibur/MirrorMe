@@ -350,6 +350,13 @@ class EventStore:
             rows = conn.execute(query).fetchall()
         return [str(row["date"]) for row in rows]
 
+    def system_ime_capture_health(self) -> dict[str, object]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "select count(*) as total, max(created_at) as last_captured_at from text_events where source_method = 'system_ime_commit'"
+            ).fetchone()
+        return {"captured_event_count": int(row["total"]), "last_captured_at": row["last_captured_at"]}
+
     def list_events(
         self,
         *,

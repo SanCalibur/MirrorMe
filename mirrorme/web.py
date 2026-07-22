@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, urlparse
 
 from .ime import input_method_status
 from .composition import compose_events
-from .ime_bridge import drain_system_ime_queue
+from .ime_bridge import drain_system_ime_queue, system_ime_queue_health
 from .ime_capture import capture_ime_commit
 from .ime_sidecar import SidecarError
 from .ime_sidecar import commit as ime_commit
@@ -89,7 +89,9 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
                 self._send_json(self.store.tags(include_private=include_private))
                 return
             if parsed.path == "/api/ime/status":
-                self._send_json(input_method_status())
+                status = input_method_status()
+                status["system_capture"] = {**self.store.system_ime_capture_health(), **system_ime_queue_health()}
+                self._send_json(status)
                 return
             if parsed.path == "/api/ime/schema":
                 self._send_json(ime_schema_info())

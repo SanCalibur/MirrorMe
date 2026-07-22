@@ -119,6 +119,8 @@ def test_web_api_exposes_input_method_status(tmp_path: Path) -> None:
     assert status["capture_policy"]["capture_committed_text_only"] is True
     assert status["native_adapter"]["engine_id"] == "rime-librime"
     assert "readiness" in status["native_adapter"]
+    assert isinstance(status["system_capture"]["pending_commits"], int)
+    assert status["system_capture"]["last_captured_at"] is None
 
 
 def test_web_api_exposes_ime_sidecar_protocol(tmp_path: Path) -> None:
