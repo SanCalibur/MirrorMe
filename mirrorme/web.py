@@ -16,6 +16,7 @@ from .ime_sidecar import compose as ime_compose
 from .ime_sidecar import schema_info as ime_schema_info
 from .llm_cleaner import LlmCleaningError, clean_text_with_llm
 from .llm_observer import LlmObservationError, observe_text_with_llm
+from .llm_diary import write_diary_with_llm
 from .observation_quality import apply_quality_gate, assess_observation_input
 from .store import DEFAULT_DB_PATH, CapturePausedError, EventStore
 from .text_workbench import process_text
@@ -43,7 +44,7 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
         def do_GET(self) -> None:
             drain_system_ime_queue(self.store)
             parsed = urlparse(self.path)
-            if parsed.path in {"/", "/state", "/capture", "/analysis", "/showcase", "/settings"}:
+            if parsed.path in {"/", "/state", "/capture", "/analysis", "/diary", "/showcase", "/settings"}:
                 self._send_static("index.html")
                 return
             if parsed.path.startswith("/assets/"):
@@ -77,6 +78,10 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
                     limit=_positive_int(_first(params, "limit")),
                 )
                 self._send_json([_state_assessment_to_json(record, feedback=self.store.get_assessment_feedback(record.id)) for record in records])
+                return
+            if parsed.path == "/api/diaries":
+                diary = self.store.get_daily_diary(_first(parse_qs(parsed.query), "date") or datetime.now(LOCAL_TZ).date().isoformat())
+                self._send_json(_daily_diary_to_json(diary) if diary else None)
                 return
             if parsed.path == "/api/projects":
                 params = parse_qs(parsed.query)
@@ -166,6 +171,20 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
                     cleaned = clean_text_with_llm(text=source_text, api_url=str(payload.get("api_url", "")), api_key=str(payload.get("api_key", "")), model=str(payload.get("model", "")), prompt=str(payload.get("prompt", "")))
                     document = self.store.save_cleaned_document(date=date or datetime.now().date().isoformat(), content=cleaned, source_event_ids=[event.id for event in events], model=str(payload.get("model", "")), prompt=str(payload.get("prompt", "")))
                     self._send_json({"document": _cleaned_document_to_json(document), "source_event_count": len(events), "composed_event_count": len(composed_events), "output": cleaned})
+                    return
+                if parsed.path == "/api/diaries/generate":
+                    date = str(payload.get("date", "")) or datetime.now(LOCAL_TZ).date().isoformat()
+                    document = self.store.latest_accepted_cleaned_document(date)
+                    if document is None:
+                        self._send_json({"error": "请先接受当天的清洗文本，再生成日记。"}, status=422)
+                        return
+                    content = write_diary_with_llm(text=document.content, api_url=str(payload.get("api_url", "")), api_key=str(payload.get("api_key", "")), model=str(payload.get("model", "")), prompt=str(payload.get("prompt", "")))
+                    diary = self.store.save_daily_diary(date=date, content=content, cleaned_document_id=document.id, model=str(payload.get("model", "")), prompt=str(payload.get("prompt", "")), source="llm")
+                    self._send_json(_daily_diary_to_json(diary), status=201)
+                    return
+                if parsed.path == "/api/diaries":
+                    diary = self.store.save_daily_diary(date=str(payload.get("date", "")) or datetime.now(LOCAL_TZ).date().isoformat(), content=str(payload.get("content", "")), source="manual")
+                    self._send_json(_daily_diary_to_json(diary))
                     return
                 if parsed.path.startswith("/api/cleaned-documents/") and parsed.path.endswith("/accept"):
                     document_id = parsed.path.removeprefix("/api/cleaned-documents/").removesuffix("/accept").rstrip("/")
@@ -389,6 +408,10 @@ def _state_assessment_to_json(record: object, *, feedback: dict[str, str | None]
 
 def _cleaned_document_to_json(record: object) -> dict[str, object]:
     return {"id": record.id, "date": record.date, "version": record.version, "content": record.content, "source_event_ids": record.source_event_ids, "model": record.model, "prompt_hash": record.prompt_hash, "status": record.status, "created_at": record.created_at}
+
+
+def _daily_diary_to_json(record: object) -> dict[str, object]:
+    return {"date": record.date, "content": record.content, "cleaned_document_id": record.cleaned_document_id, "model": record.model, "prompt_hash": record.prompt_hash, "source": record.source, "created_at": record.created_at, "updated_at": record.updated_at}
 
 
 def _first(params: dict[str, list[str]], key: str, default: str | None = None) -> str | None:

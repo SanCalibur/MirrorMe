@@ -269,6 +269,15 @@ def test_event_dates_excludes_private_events_by_default(tmp_path: Path) -> None:
     assert store.event_dates(include_private=True) == ["2026-06-24", "2026-06-25"]
 
 
+def test_daily_diary_preserves_creation_time_when_user_edits_it(tmp_path: Path) -> None:
+    store = EventStore(tmp_path / "mirrorme.db")
+    created = store.save_daily_diary(date="2026-06-25", content="Generated diary", source="llm")
+    updated = store.save_daily_diary(date="2026-06-25", content="Edited diary", source="manual")
+
+    assert updated.created_at == created.created_at
+    assert store.get_daily_diary("2026-06-25").content == "Edited diary"
+
+
 def test_accept_candidate_creates_memory_and_removes_from_pending_review(tmp_path: Path) -> None:
     store = EventStore(tmp_path / "mirrorme.db")
     event = store.add_text("\u6211\u51b3\u5b9a MirrorMe \u5148\u505a review loop\u3002")

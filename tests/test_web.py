@@ -385,6 +385,32 @@ def test_web_api_saves_llm_observation_from_an_accepted_document(tmp_path: Path)
     assert [record["id"] for record in records] == [saved["id"]]
 
 
+def test_web_generates_and_saves_a_diary_from_an_accepted_cleaned_document(tmp_path: Path) -> None:
+    db_path = tmp_path / "mirrorme.db"
+    store = EventStore(db_path)
+    event = store.add_text("Diary source", created_at="2026-06-25T09:00:00+08:00")
+    document = store.save_cleaned_document(date="2026-06-25", content="Diary source " * 30, source_event_ids=[event.id], model="cleaner", prompt="clean")
+    store.accept_cleaned_document(document.id)
+
+    with patch("mirrorme.web.write_diary_with_llm", return_value="A concise diary."):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), create_handler(db_path))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base_url = f"http://127.0.0.1:{server.server_port}"
+        try:
+            generated = _post_json(f"{base_url}/api/diaries/generate", {"date": "2026-06-25", "api_url": "http://local", "api_key": "key", "model": "model"})
+            saved = _post_json(f"{base_url}/api/diaries", {"date": "2026-06-25", "content": "Edited diary."})
+            diary = _get_json(f"{base_url}/api/diaries?date=2026-06-25")
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+    assert generated["content"] == "A concise diary."
+    assert saved["source"] == "manual"
+    assert diary["content"] == "Edited diary."
+
+
 def test_web_rejects_llm_observation_when_the_accepted_text_is_too_short(tmp_path: Path) -> None:
     db_path = tmp_path / "mirrorme.db"
     store = EventStore(db_path)

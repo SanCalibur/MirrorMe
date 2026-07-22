@@ -96,6 +96,18 @@ class CleanedDocument:
 
 
 @dataclass(frozen=True)
+class DailyDiary:
+    date: str
+    content: str
+    cleaned_document_id: str | None
+    model: str | None
+    prompt_hash: str | None
+    source: str
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
 class SearchResult:
     kind: str
     id: str
@@ -227,6 +239,7 @@ class EventStore:
                 )
                 """
             )
+            conn.execute("""create table if not exists daily_diaries (date text primary key, content text not null, cleaned_document_id text, model text, prompt_hash text, source text not null, created_at text not null, updated_at text not null)""")
             conn.execute(
                 """
                 create table if not exists settings (
@@ -604,6 +617,29 @@ class EventStore:
         with self._connect() as conn:
             row = conn.execute("select * from cleaned_documents where id = ?", (document_id,)).fetchone()
         return self._row_to_cleaned_document(row) if row is not None else None
+
+    def latest_accepted_cleaned_document(self, date: str) -> CleanedDocument | None:
+        with self._connect() as conn:
+            row = conn.execute("select * from cleaned_documents where date = ? and status = 'accepted' order by version desc limit 1", (date,)).fetchone()
+        return self._row_to_cleaned_document(row) if row is not None else None
+
+    def save_daily_diary(self, *, date: str, content: str, cleaned_document_id: str | None = None, model: str | None = None, prompt: str | None = None, source: str = "manual") -> DailyDiary:
+        if not content.strip():
+            raise ValueError("日记内容不能为空。")
+        if len(content.strip()) > 10000:
+            raise ValueError("日记内容不能超过10000字。")
+        now = datetime.now(LOCAL_TZ).isoformat(timespec="seconds")
+        prompt_hash = sha256(prompt.encode("utf-8")).hexdigest() if prompt is not None else None
+        with self._connect() as conn:
+            existing = conn.execute("select created_at from daily_diaries where date = ?", (date,)).fetchone()
+            created_at = existing["created_at"] if existing is not None else now
+            conn.execute("insert into daily_diaries (date,content,cleaned_document_id,model,prompt_hash,source,created_at,updated_at) values (?,?,?,?,?,?,?,?) on conflict(date) do update set content=excluded.content, cleaned_document_id=excluded.cleaned_document_id, model=excluded.model, prompt_hash=excluded.prompt_hash, source=excluded.source, updated_at=excluded.updated_at", (date, content.strip(), cleaned_document_id, model, prompt_hash, source, created_at, now))
+        return DailyDiary(date, content.strip(), cleaned_document_id, model, prompt_hash, source, created_at, now)
+
+    def get_daily_diary(self, date: str) -> DailyDiary | None:
+        with self._connect() as conn:
+            row = conn.execute("select * from daily_diaries where date = ?", (date,)).fetchone()
+        return self._row_to_daily_diary(row) if row is not None else None
 
     def save_llm_state_assessment(self, document: CleanedDocument, assessment: dict[str, object]) -> StateAssessment:
         if document.status != "accepted":
@@ -1983,6 +2019,10 @@ class EventStore:
             content=str(row["content"]), source_event_ids=json.loads(str(row["source_event_ids_json"])),
             model=str(row["model"]), prompt_hash=str(row["prompt_hash"]), status=str(row["status"]), created_at=str(row["created_at"]),
         )
+
+    @staticmethod
+    def _row_to_daily_diary(row: sqlite3.Row) -> DailyDiary:
+        return DailyDiary(row["date"], row["content"], row["cleaned_document_id"], row["model"], row["prompt_hash"], row["source"], row["created_at"], row["updated_at"])
 
     @staticmethod
     def _event_to_dict(event: TextEvent, *, include_raw: bool) -> dict[str, object]:
