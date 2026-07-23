@@ -108,6 +108,17 @@ class DailyDiary:
 
 
 @dataclass(frozen=True)
+class ActionItem:
+    id: str
+    week_start: str
+    title: str
+    source: str
+    completed_at: str | None
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
 class SearchResult:
     kind: str
     id: str
@@ -240,6 +251,15 @@ class EventStore:
                 """
             )
             conn.execute("""create table if not exists daily_diaries (date text primary key, content text not null, cleaned_document_id text, model text, prompt_hash text, source text not null, created_at text not null, updated_at text not null)""")
+            conn.execute(
+                """
+                create table if not exists action_items (
+                    id text primary key, week_start text not null, title text not null,
+                    source text not null, completed_at text, created_at text not null, updated_at text not null
+                )
+                """
+            )
+            conn.execute("create index if not exists idx_action_items_week_start on action_items(week_start)")
             conn.execute(
                 """
                 create table if not exists settings (
@@ -641,6 +661,70 @@ class EventStore:
             row = conn.execute("select * from daily_diaries where date = ?", (date,)).fetchone()
         return self._row_to_daily_diary(row) if row is not None else None
 
+    def weekly_review(self, end_date: str | None = None) -> dict[str, object]:
+        end = Date.fromisoformat(end_date) if end_date else datetime.now(LOCAL_TZ).date()
+        start = end - timedelta(days=6)
+        records = self.list_state_assessments(
+            start_date=start.isoformat(), end_date=end.isoformat(), method="llm", latest_per_day=True
+        )
+        usable = [record for record in records if record.assessment.get("data_quality") != "limited"]
+        metric_values: dict[str, list[int]] = {}
+        metric_labels: dict[str, str] = {}
+        for record in usable:
+            for metric in record.assessment.get("metrics", []):
+                if not isinstance(metric, dict) or not isinstance(metric.get("score"), int):
+                    continue
+                key = str(metric.get("key", ""))
+                if not key:
+                    continue
+                metric_values.setdefault(key, []).append(metric["score"])
+                metric_labels[key] = str(metric.get("label", key))
+        metrics = [
+            {"key": key, "label": metric_labels[key], "average": round(sum(values) / len(values)), "latest": values[-1], "change": values[-1] - values[0]}
+            for key, values in metric_values.items()
+        ]
+        metrics.sort(key=lambda metric: abs(int(metric["change"])), reverse=True)
+        feedback = [self.get_assessment_feedback(record.id) for record in records]
+        feedback_counts = Counter(item["verdict"] for item in feedback if item)
+        confidence = round(sum(float(record.assessment.get("confidence", 0)) for record in usable) / len(usable), 2) if usable else 0.0
+        quality = "sufficient" if len(usable) >= 3 else "limited"
+        headline = (
+            f"本周已有 {len(usable)} 天可用观察。" if quality == "sufficient"
+            else f"本周只有 {len(usable)} 天可用观察，暂不宜形成稳定趋势结论。"
+        )
+        return {
+            "start_date": start.isoformat(), "end_date": end.isoformat(), "data_quality": quality,
+            "headline": headline, "observed_days": len(records), "usable_days": len(usable),
+            "average_confidence": confidence, "metrics": metrics, "feedback": dict(feedback_counts),
+            "source_assessment_ids": [record.id for record in records],
+        }
+
+    def create_action_item(self, *, week_start: str, title: str, source: str = "manual") -> ActionItem:
+        cleaned_title = title.strip()
+        if not cleaned_title:
+            raise ValueError("行动内容不能为空。")
+        if len(cleaned_title) > 300:
+            raise ValueError("行动内容不能超过300字。")
+        Date.fromisoformat(week_start)
+        now = datetime.now(LOCAL_TZ).isoformat(timespec="seconds")
+        with self._connect() as conn:
+            number = int(conn.execute("select count(*) from action_items where week_start = ?", (week_start,)).fetchone()[0]) + 1
+            record = ActionItem(f"act_{week_start.replace('-', '')}_{number:03d}", week_start, cleaned_title, source, None, now, now)
+            conn.execute("insert into action_items (id,week_start,title,source,completed_at,created_at,updated_at) values (?,?,?,?,?,?,?)", (record.id, record.week_start, record.title, record.source, record.completed_at, record.created_at, record.updated_at))
+        return record
+
+    def list_action_items(self, week_start: str) -> list[ActionItem]:
+        with self._connect() as conn:
+            rows = conn.execute("select * from action_items where week_start = ? order by completed_at is not null, created_at asc", (week_start,)).fetchall()
+        return [self._row_to_action_item(row) for row in rows]
+
+    def toggle_action_item(self, action_id: str, completed: bool) -> ActionItem | None:
+        now = datetime.now(LOCAL_TZ).isoformat(timespec="seconds")
+        with self._connect() as conn:
+            conn.execute("update action_items set completed_at = ?, updated_at = ? where id = ?", (now if completed else None, now, action_id))
+            row = conn.execute("select * from action_items where id = ?", (action_id,)).fetchone()
+        return self._row_to_action_item(row) if row is not None else None
+
     def save_llm_state_assessment(self, document: CleanedDocument, assessment: dict[str, object]) -> StateAssessment:
         if document.status != "accepted":
             raise ValueError("请先接受清洗文本版本，再生成 LLM 观察。")
@@ -1036,6 +1120,8 @@ class EventStore:
 
     def purge_all(self) -> None:
         with self._connect() as conn:
+            conn.execute("delete from action_items")
+            conn.execute("delete from daily_diaries")
             conn.execute("delete from memory_reviews")
             conn.execute("delete from memories")
             conn.execute("delete from daily_summaries")
@@ -2023,6 +2109,10 @@ class EventStore:
     @staticmethod
     def _row_to_daily_diary(row: sqlite3.Row) -> DailyDiary:
         return DailyDiary(row["date"], row["content"], row["cleaned_document_id"], row["model"], row["prompt_hash"], row["source"], row["created_at"], row["updated_at"])
+
+    @staticmethod
+    def _row_to_action_item(row: sqlite3.Row) -> ActionItem:
+        return ActionItem(row["id"], row["week_start"], row["title"], row["source"], row["completed_at"], row["created_at"], row["updated_at"])
 
     @staticmethod
     def _event_to_dict(event: TextEvent, *, include_raw: bool) -> dict[str, object]:

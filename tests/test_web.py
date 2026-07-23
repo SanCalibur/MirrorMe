@@ -492,6 +492,35 @@ def test_web_event_api_limits_the_returned_window(tmp_path: Path) -> None:
     assert [event["redacted"] for event in events] == ["event 1", "event 2"]
 
 
+def test_web_returns_weekly_review_and_persists_actions(tmp_path: Path) -> None:
+    db_path = tmp_path / "mirrorme.db"
+    store = EventStore(db_path)
+    for day in ("2026-06-22", "2026-06-23", "2026-06-24"):
+        event = store.add_text("A sufficiently detailed public note " * 10, created_at=f"{day}T09:00:00+08:00")
+        document = store.save_cleaned_document(date=day, content="A sufficiently detailed clean note " * 20, source_event_ids=[event.id], model="cleaner", prompt="clean")
+        accepted = store.accept_cleaned_document(document.id)
+        assert accepted is not None
+        store.save_llm_state_assessment(accepted, {"method": "llm", "metrics": [{"key": "clarity", "label": "Clarity", "score": 70}], "summary": "Observed", "data_quality": "sufficient", "confidence": 0.8, "model": "observer", "prompt_hash": "hash"})
+    server = ThreadingHTTPServer(("127.0.0.1", 0), create_handler(db_path))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+
+    try:
+        review = _get_json(f"{base_url}/api/weekly-review?end_date=2026-06-24")
+        action = _post_json(f"{base_url}/api/actions", {"week_start": review["start_date"], "title": "Make the next step visible."})
+        toggled = _post_json(f"{base_url}/api/actions/{action['id']}/toggle", {"completed": True})
+        actions = _get_json(f"{base_url}/api/actions?week_start={review['start_date']}")
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert review["usable_days"] == 3
+    assert toggled["completed_at"] is not None
+    assert actions[0]["id"] == action["id"]
+
+
 def _get_json(url: str) -> object:
     with urlopen(url, timeout=5) as response:
         return json.loads(response.read().decode("utf-8"))

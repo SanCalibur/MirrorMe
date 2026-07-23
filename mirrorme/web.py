@@ -44,7 +44,7 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
         def do_GET(self) -> None:
             drain_system_ime_queue(self.store)
             parsed = urlparse(self.path)
-            if parsed.path in {"/", "/state", "/capture", "/analysis", "/diary", "/showcase", "/settings"}:
+            if parsed.path in {"/", "/state", "/capture", "/analysis", "/diary", "/review", "/showcase", "/settings"}:
                 self._send_static("index.html")
                 return
             if parsed.path.startswith("/assets/"):
@@ -82,6 +82,16 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
             if parsed.path == "/api/diaries":
                 diary = self.store.get_daily_diary(_first(parse_qs(parsed.query), "date") or datetime.now(LOCAL_TZ).date().isoformat())
                 self._send_json(_daily_diary_to_json(diary) if diary else None)
+                return
+            if parsed.path == "/api/weekly-review":
+                self._send_json(self.store.weekly_review(_first(parse_qs(parsed.query), "end_date")))
+                return
+            if parsed.path == "/api/actions":
+                week_start = _first(parse_qs(parsed.query), "week_start")
+                if not week_start:
+                    self._send_json({"error": "week_start is required."}, status=400)
+                    return
+                self._send_json([_action_item_to_json(item) for item in self.store.list_action_items(week_start)])
                 return
             if parsed.path == "/api/projects":
                 params = parse_qs(parsed.query)
@@ -185,6 +195,22 @@ def create_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
                 if parsed.path == "/api/diaries":
                     diary = self.store.save_daily_diary(date=str(payload.get("date", "")) or datetime.now(LOCAL_TZ).date().isoformat(), content=str(payload.get("content", "")), source="manual")
                     self._send_json(_daily_diary_to_json(diary))
+                    return
+                if parsed.path == "/api/actions":
+                    action = self.store.create_action_item(
+                        week_start=str(payload.get("week_start", "")),
+                        title=str(payload.get("title", "")),
+                        source=str(payload.get("source", "manual")),
+                    )
+                    self._send_json(_action_item_to_json(action), status=201)
+                    return
+                if parsed.path.startswith("/api/actions/") and parsed.path.endswith("/toggle"):
+                    action_id = parsed.path.removeprefix("/api/actions/").removesuffix("/toggle").rstrip("/")
+                    action = self.store.toggle_action_item(action_id, bool(payload.get("completed", False)))
+                    if action is None:
+                        self._send_json({"error": "Action not found."}, status=404)
+                        return
+                    self._send_json(_action_item_to_json(action))
                     return
                 if parsed.path.startswith("/api/cleaned-documents/") and parsed.path.endswith("/accept"):
                     document_id = parsed.path.removeprefix("/api/cleaned-documents/").removesuffix("/accept").rstrip("/")
@@ -412,6 +438,10 @@ def _cleaned_document_to_json(record: object) -> dict[str, object]:
 
 def _daily_diary_to_json(record: object) -> dict[str, object]:
     return {"date": record.date, "content": record.content, "cleaned_document_id": record.cleaned_document_id, "model": record.model, "prompt_hash": record.prompt_hash, "source": record.source, "created_at": record.created_at, "updated_at": record.updated_at}
+
+
+def _action_item_to_json(record: object) -> dict[str, object]:
+    return {"id": record.id, "week_start": record.week_start, "title": record.title, "source": record.source, "completed_at": record.completed_at, "created_at": record.created_at, "updated_at": record.updated_at}
 
 
 def _first(params: dict[str, list[str]], key: str, default: str | None = None) -> str | None:

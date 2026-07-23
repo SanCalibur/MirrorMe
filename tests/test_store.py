@@ -948,6 +948,26 @@ def test_doctor_reports_clean_store(tmp_path: Path) -> None:
     assert report["counts"]["memories"] == 1
 
 
+def test_weekly_review_aggregates_latest_llm_observations_and_actions(tmp_path: Path) -> None:
+    store = EventStore(tmp_path / "mirrorme.db")
+    for day, clarity in [("2026-06-22", 60), ("2026-06-23", 74), ("2026-06-24", 81)]:
+        event = store.add_text(f"Public text for {day}" * 8, created_at=f"{day}T09:00:00+08:00")
+        document = store.save_cleaned_document(date=day, content="enough clean text " * 30, source_event_ids=[event.id], model="cleaner", prompt="clean")
+        accepted = store.accept_cleaned_document(document.id)
+        assert accepted is not None
+        store.save_llm_state_assessment(accepted, {"method": "llm", "metrics": [{"key": "clarity", "label": "表达准确性", "score": clarity}], "summary": "Observed", "data_quality": "sufficient", "confidence": 0.8, "model": "observer", "prompt_hash": "hash"})
+
+    review = store.weekly_review("2026-06-24")
+    action = store.create_action_item(week_start=review["start_date"], title="Write one clear next step.")
+    complete = store.toggle_action_item(action.id, True)
+
+    assert review["data_quality"] == "sufficient"
+    assert review["usable_days"] == 3
+    assert review["metrics"] == [{"key": "clarity", "label": "表达准确性", "average": 72, "latest": 81, "change": 21}]
+    assert complete is not None and complete.completed_at is not None
+    assert store.list_action_items(review["start_date"])[0].id == action.id
+
+
 def test_doctor_reports_integrity_issues(tmp_path: Path) -> None:
     store = EventStore(tmp_path / "mirrorme.db")
     private_event = store.add_text(
